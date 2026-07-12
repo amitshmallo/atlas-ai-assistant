@@ -1,0 +1,12 @@
+# azd project file — see https://aka.ms/azure-dev/azure-yaml-schema
+name: atlas
+metadata:
+  template: atlas-ai-executive-assistant
+
+services:
+  api:
+    project: .
+    language: python
+    host: containerapp
+    docker:
+      path: Dockerfile
