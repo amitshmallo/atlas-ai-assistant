@@ -35,3 +35,26 @@ class ChatClient(Protocol):
     on the concrete Azure OpenAI SDK implementation."""
 
     def stream_completion(self, messages: list[ChatMessage]) -> AsyncIterator[str]: ...
+
+
+class ConversationRepository(Protocol):
+    """Abstract boundary over conversation history storage. The concrete
+    implementation persists durably to Postgres and read-through caches
+    the recent window in Redis — application only ever sees this interface,
+    so it has no idea storage is split across two systems."""
+
+    async def create_conversation(self, user_oid: str) -> str:
+        """Returns the new conversation's id."""
+        ...
+
+    async def get_recent_messages(self, conversation_id: str, limit: int) -> list[ChatMessage]: ...
+
+    async def append_message(self, conversation_id: str, message: ChatMessage) -> None: ...
+
+    async def get_owner(self, conversation_id: str) -> str | None:
+        """Returns the user_oid that owns this conversation, or None if it
+        doesn't exist. Callers must check this before reading or appending
+        to a conversation_id supplied by the client — otherwise one user
+        could read or write another user's chat history by guessing/reusing
+        a conversation id."""
+        ...

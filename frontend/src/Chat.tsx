@@ -33,13 +33,16 @@ export function Chat({
   const [input, setInput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isStreaming, setIsStreaming] = useState(false)
+  // Kept in memory only — Phase 5 proves persistence lives server-side
+  // (Postgres + Redis), not that the browser tab remembers it across reloads.
+  const [conversationId, setConversationId] = useState<string | null>(null)
 
   const send = async () => {
     if (!input.trim() || isStreaming) return
     setError(null)
 
-    const nextMessages: ChatMessage[] = [...messages, { role: 'user', content: input }]
-    setMessages([...nextMessages, { role: 'assistant', content: '' }])
+    const userMessage = input
+    setMessages((prev) => [...prev, { role: 'user', content: userMessage }, { role: 'assistant', content: '' }])
     setInput('')
     setIsStreaming(true)
 
@@ -52,10 +55,15 @@ export function Chat({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${tokenResponse.accessToken}`,
         },
-        body: JSON.stringify({ messages: nextMessages }),
+        body: JSON.stringify({ conversation_id: conversationId, message: userMessage }),
       })
       if (!response.ok || !response.body) {
         throw new Error(`API returned ${response.status}`)
+      }
+
+      const returnedConversationId = response.headers.get('X-Conversation-Id')
+      if (returnedConversationId) {
+        setConversationId(returnedConversationId)
       }
 
       const reader = response.body.getReader()
@@ -66,7 +74,7 @@ export function Chat({
         const { done, value } = await reader.read()
         if (done) break
         assistantText += decoder.decode(value, { stream: true })
-        setMessages([...nextMessages, { role: 'assistant', content: assistantText }])
+        setMessages((prev) => [...prev.slice(0, -1), { role: 'assistant', content: assistantText }])
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -77,6 +85,8 @@ export function Chat({
 
   return (
     <div className="chat">
+      {conversationId && <p className="chat-conversation-id">Conversation: {conversationId}</p>}
+
       <div className="chat-history">
         {messages.map((message, index) => (
           <p key={index} className={`chat-message chat-message-${message.role}`}>

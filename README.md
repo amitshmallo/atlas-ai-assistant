@@ -4,6 +4,7 @@ Phase 1: project skeleton, Clean Architecture layering, health check.
 Phase 2: Entra ID authentication + Microsoft Graph (On-Behalf-Of flow).
 Phase 3: Azure deployment (Container Apps, Key Vault, Postgres, Redis, ACR) via `azd`.
 Phase 4: LLM integration — streaming chat via Azure OpenAI (AI Foundry).
+Phase 5: Conversation memory — Postgres-backed history, Redis cache-aside.
 
 See the full PRD/phased plan at `.claude/plans/project-atlas-calm-ember.md` (or wherever it was saved).
 
@@ -37,6 +38,16 @@ alongside `AZURE_OPENAI_ENDPOINT`, or run `az login` first and leave the key
 unset — the app falls back to your `az login` credential via
 `DefaultAzureCredential` (the same code path the Container App uses with
 its managed identity in Azure, see `app/infrastructure/chat_client.py`).
+
+`POST /chat` takes `{ conversation_id: string | null, message: string }` and
+streams the reply as plain text, returning the (possibly newly created)
+conversation id in the `X-Conversation-Id` response header. Pass that same
+id back on the next call to continue the conversation — history is loaded
+from Postgres (cached in Redis) before each call, so any API instance can
+service any turn of any conversation. `GET /chat/{conversation_id}/messages`
+returns the stored history; both endpoints check the conversation's
+`user_oid` against the caller's token and 404 if they don't match, so one
+user can't read or write another user's conversation by guessing an id.
 
 ## Tests
 

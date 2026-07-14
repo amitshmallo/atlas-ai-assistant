@@ -8,6 +8,7 @@ from app.application.chat import SendChatMessageUseCase
 from app.application.graph_profile import GetMyProfileUseCase
 from app.application.health import GetHealthStatusUseCase
 from app.infrastructure.chat_client import AzureOpenAIChatClient
+from app.infrastructure.conversation_repository import SqlAlchemyConversationRepository
 from app.infrastructure.database import get_session
 from app.infrastructure.graph_client import HttpxGraphClient
 from app.infrastructure.health_repository import SqlAlchemyHealthCheckRepository
@@ -33,5 +34,10 @@ def _get_chat_client() -> AzureOpenAIChatClient:
     return AzureOpenAIChatClient()
 
 
-def get_send_chat_message_use_case() -> SendChatMessageUseCase:
-    return SendChatMessageUseCase(_get_chat_client())
+def get_send_chat_message_use_case(session: SessionDep) -> SendChatMessageUseCase:
+    conversation_repository = SqlAlchemyConversationRepository(session, redis_client)
+    return SendChatMessageUseCase(_get_chat_client(), conversation_repository)
+
+
+def get_conversation_repository(session: SessionDep) -> SqlAlchemyConversationRepository:
+    return SqlAlchemyConversationRepository(session, redis_client)

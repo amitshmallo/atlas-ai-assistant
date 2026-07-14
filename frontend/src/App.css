@@ -206,3 +206,8 @@
 .chat-input input {
   flex: 1;
 }
+
+.chat-conversation-id {
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
