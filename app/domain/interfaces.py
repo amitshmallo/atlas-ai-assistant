@@ -1,6 +1,7 @@
+from collections.abc import AsyncIterator
 from typing import Protocol
 
-from app.domain.entities import UserProfile
+from app.domain.entities import ChatMessage, UserProfile
 
 
 class HealthCheckRepository(Protocol):
@@ -27,3 +28,10 @@ class GraphClient(Protocol):
     never on the concrete httpx-based implementation."""
 
     async def get_my_profile(self, access_token: str) -> UserProfile: ...
+
+
+class ChatClient(Protocol):
+    """Abstract boundary over the LLM. application depends on this, never
+    on the concrete Azure OpenAI SDK implementation."""
+
+    def stream_completion(self, messages: list[ChatMessage]) -> AsyncIterator[str]: ...

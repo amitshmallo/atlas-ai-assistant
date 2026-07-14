@@ -6,12 +6,16 @@ param containerRegistryLoginServer string
 param keyVaultName string
 param entraTenantId string
 param entraApiClientId string
+param azureOpenAiEndpoint string
+param azureOpenAiDeployment string
+param aiFoundryAccountName string
 
 @description('Placeholder image used on first deploy; azd/CI replaces this with the built image on subsequent deploys.')
 param apiImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
 
 var acrPullRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
 var keyVaultSecretsUserRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
+var cognitiveServicesOpenAiUserRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
   name: keyVaultName
@@ -19,6 +23,10 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
 
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' existing = {
   name: split(containerRegistryLoginServer, '.')[0]
+}
+
+resource aiFoundryAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = {
+  name: aiFoundryAccountName
 }
 
 resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
@@ -76,6 +84,8 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'ENTRA_TENANT_ID', value: entraTenantId }
             { name: 'ENTRA_API_CLIENT_ID', value: entraApiClientId }
             { name: 'ENTRA_API_CLIENT_SECRET', secretRef: 'entra-api-client-secret' }
+            { name: 'AZURE_OPENAI_ENDPOINT', value: azureOpenAiEndpoint }
+            { name: 'AZURE_OPENAI_DEPLOYMENT', value: azureOpenAiDeployment }
           ]
         }
       ]
@@ -107,6 +117,16 @@ resource keyVaultSecretsUserAssignment 'Microsoft.Authorization/roleAssignments@
   scope: keyVault
   properties: {
     roleDefinitionId: keyVaultSecretsUserRoleId
+    principalId: containerApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource cognitiveServicesOpenAiUserAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(aiFoundryAccount.id, containerApp.id, cognitiveServicesOpenAiUserRoleId)
+  scope: aiFoundryAccount
+  properties: {
+    roleDefinitionId: cognitiveServicesOpenAiUserRoleId
     principalId: containerApp.identity.principalId
     principalType: 'ServicePrincipal'
   }

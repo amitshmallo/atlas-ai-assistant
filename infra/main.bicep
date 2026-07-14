@@ -66,6 +66,16 @@ module keyVault 'modules/key-vault.bicep' = {
   }
 }
 
+module aiFoundry 'modules/ai-foundry.bicep' = {
+  name: 'ai-foundry'
+  scope: resourceGroup
+  params: {
+    name: 'aif-${resourceToken}'
+    location: location
+    tags: tags
+  }
+}
+
 module postgres 'modules/postgres.bicep' = {
   name: 'postgres'
   scope: resourceGroup
@@ -140,6 +150,9 @@ module api 'modules/container-app-api.bicep' = {
     keyVaultName: keyVault.outputs.name
     entraTenantId: entraTenantId
     entraApiClientId: entraApiClientId
+    azureOpenAiEndpoint: aiFoundry.outputs.endpoint
+    azureOpenAiDeployment: 'gpt-4o-mini'
+    aiFoundryAccountName: aiFoundry.outputs.name
   }
   dependsOn: [
     apiSecrets

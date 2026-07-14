@@ -3,6 +3,7 @@
 Phase 1: project skeleton, Clean Architecture layering, health check.
 Phase 2: Entra ID authentication + Microsoft Graph (On-Behalf-Of flow).
 Phase 3: Azure deployment (Container Apps, Key Vault, Postgres, Redis, ACR) via `azd`.
+Phase 4: LLM integration — streaming chat via Azure OpenAI (AI Foundry).
 
 See the full PRD/phased plan at `.claude/plans/project-atlas-calm-ember.md` (or wherever it was saved).
 
@@ -28,8 +29,14 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-`GET http://localhost:8000/health` should return 200. `GET /me` requires a
-valid bearer token (see Entra ID setup below).
+`GET http://localhost:8000/health` should return 200. `GET /me` and
+`POST /chat` require a valid bearer token (see Entra ID setup below).
+
+To test `/chat` locally, either set `AZURE_OPENAI_API_KEY` in `.env`
+alongside `AZURE_OPENAI_ENDPOINT`, or run `az login` first and leave the key
+unset — the app falls back to your `az login` credential via
+`DefaultAzureCredential` (the same code path the Container App uses with
+its managed identity in Azure, see `app/infrastructure/chat_client.py`).
 
 ## Tests
 
@@ -123,12 +130,15 @@ azd auth login
 - Key Vault (RBAC-authorized) — holds `database-url`, `redis-url`, `entra-api-client-secret`
 - Azure Database for PostgreSQL – Flexible Server (Burstable B1ms, dev-sized)
 - Azure Cache for Redis (Basic) — backs the OBO token cache in prod, same role Docker Compose's `redis` plays locally
+- Azure AI Foundry (Cognitive Services `AIServices` account) with a `gpt-4o-mini` deployment — backs `/chat`
 - Container Apps environment + the `api` Container App (system-assigned managed identity, scales to zero, pulls secrets straight from Key Vault via `keyVaultUrl` — no secrets ever sit in Container App config as plain env values)
 
 The API container never touches Azure credentials directly — its managed
-identity is granted `AcrPull` on the registry and `Key Vault Secrets User`
-on the vault, and Container Apps resolves `keyVaultUrl` secrets at runtime
-using that identity.
+identity is granted `AcrPull` on the registry, `Key Vault Secrets User` on
+the vault, and `Cognitive Services OpenAI User` on the AI Foundry account.
+Container Apps resolves `keyVaultUrl` secrets at runtime using that same
+identity, and `chat_client.py` authenticates to Azure OpenAI with it too —
+no API key is ever deployed to the Container App.
 
 ### Deploy
 
