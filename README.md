@@ -168,7 +168,7 @@ azd auth login
 - Key Vault (RBAC-authorized) — holds `database-url`, `redis-url`, `entra-api-client-secret`
 - Azure Database for PostgreSQL – Flexible Server (Burstable B1ms, dev-sized)
 - Azure Cache for Redis (Basic) — backs the OBO token cache in prod, same role Docker Compose's `redis` plays locally
-- Azure AI Foundry (Cognitive Services `AIServices` account) with a `gpt-4o-mini` deployment — backs `/chat`
+- Azure AI Foundry (Cognitive Services `AIServices` account) with a `gpt-5-mini` deployment — backs `/chat`. Model versions get retired over time (we hit exactly this with the original `gpt-4o-mini` plan); check the AI Foundry portal for the current model/version before deploying.
 - Container Apps environment + the `api` Container App (system-assigned managed identity, scales to zero, pulls secrets straight from Key Vault via `keyVaultUrl` — no secrets ever sit in Container App config as plain env values)
 
 The API container never touches Azure credentials directly — its managed
@@ -186,6 +186,7 @@ azd env set ENTRA_TENANT_ID <your-tenant-id>
 azd env set ENTRA_API_CLIENT_ID <your-api-app-client-id>
 azd env set ENTRA_API_CLIENT_SECRET <your-api-app-client-secret>
 azd env set POSTGRES_ADMIN_PASSWORD <choose-a-strong-password>
+azd env set AI_FOUNDRY_MODEL_VERSION <current gpt-5-mini version string — check the AI Foundry portal>
 
 azd up
 ```

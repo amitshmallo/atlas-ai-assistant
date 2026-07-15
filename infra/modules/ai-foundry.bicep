@@ -3,11 +3,11 @@ param location string
 param tags object
 
 @description('Model deployment name the AZURE_OPENAI_DEPLOYMENT setting points at')
-param deploymentName string = 'gpt-4o-mini'
+param deploymentName string = 'gpt-5-mini'
 
-@description('Underlying model name/version to deploy')
-param modelName string = 'gpt-4o-mini'
-param modelVersion string = '2024-07-18'
+@description('Underlying model name/version to deploy — verify the current version string in the AI Foundry portal or `az cognitiveservices account list-models` before deploying, model versions get retired/replaced over time')
+param modelName string = 'gpt-5-mini'
+param modelVersion string
 
 resource account 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
   name: name

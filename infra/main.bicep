@@ -25,6 +25,9 @@ param entraApiClientSecret string = ''
 @description('Principal ID of the identity running the deployment — azd injects this automatically so it can write Key Vault secrets under RBAC authorization')
 param principalId string = ''
 
+@description('Exact model version string for the gpt-5-mini deployment — check the AI Foundry portal or `az cognitiveservices account list-models` for the current value before deploying, since model versions get retired/replaced over time')
+param aiFoundryModelVersion string
+
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
 var tags = {
   'azd-env-name': environmentName
@@ -73,6 +76,7 @@ module aiFoundry 'modules/ai-foundry.bicep' = {
     name: 'aif-${resourceToken}'
     location: location
     tags: tags
+    modelVersion: aiFoundryModelVersion
   }
 }
 
@@ -151,7 +155,7 @@ module api 'modules/container-app-api.bicep' = {
     entraTenantId: entraTenantId
     entraApiClientId: entraApiClientId
     azureOpenAiEndpoint: aiFoundry.outputs.endpoint
-    azureOpenAiDeployment: 'gpt-4o-mini'
+    azureOpenAiDeployment: 'gpt-5-mini'
     aiFoundryAccountName: aiFoundry.outputs.name
   }
   dependsOn: [

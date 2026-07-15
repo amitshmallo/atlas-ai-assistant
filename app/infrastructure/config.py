@@ -25,7 +25,7 @@ class Settings(BaseSettings):
 
     # Azure OpenAI (via Azure AI Foundry)
     azure_openai_endpoint: str = ""
-    azure_openai_deployment: str = "gpt-4o-mini"
+    azure_openai_deployment: str = "gpt-5-mini"
     azure_openai_api_version: str = "2024-10-21"
     # Optional: only set locally if you don't want to rely on `az login`
     # credentials. In Azure, leave unset — the Container App's managed

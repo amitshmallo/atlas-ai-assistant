@@ -22,6 +22,9 @@
     },
     "entraApiClientSecret": {
       "value": "${ENTRA_API_CLIENT_SECRET}"
+    },
+    "aiFoundryModelVersion": {
+      "value": "${AI_FOUNDRY_MODEL_VERSION}"
     }
   }
 }

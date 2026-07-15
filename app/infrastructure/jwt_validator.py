@@ -49,11 +49,29 @@ class EntraJwtValidator:
                 token,
                 key,
                 algorithms=["RS256"],
-                audience=settings.entra_api_client_id,
-                issuer=settings.entra_issuer,
+                options={"verify_aud": False, "verify_iss": False},
             )
         except JWTError as exc:
             raise InvalidTokenError(str(exc)) from exc
+
+        # Depending on the app registration's accessTokenAcceptedVersion
+        # manifest setting, Entra ID issues either v1.0 tokens (issuer
+        # sts.windows.net, aud = bare client id) or v2.0 tokens (issuer
+        # login.microsoftonline.com/.../v2.0, aud = App ID URI). Accept both
+        # rather than depending on that manifest setting being one specific
+        # value.
+        expected_audiences = {
+            settings.entra_api_client_id,
+            f"api://{settings.entra_api_client_id}",
+        }
+        expected_issuers = {
+            settings.entra_issuer,
+            f"https://sts.windows.net/{settings.entra_tenant_id}/",
+        }
+        if claims.get("aud") not in expected_audiences:
+            raise InvalidTokenError(f"Unexpected audience: {claims.get('aud')!r}")
+        if claims.get("iss") not in expected_issuers:
+            raise InvalidTokenError(f"Unexpected issuer: {claims.get('iss')!r}")
 
         oid = claims.get("oid")
         if not oid:
