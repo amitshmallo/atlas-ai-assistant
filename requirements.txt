@@ -13,3 +13,4 @@ python-jose[cryptography]>=3.3
 msal>=1.31
 openai>=1.54
 azure-identity>=1.19
+mcp>=1.9

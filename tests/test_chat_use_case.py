@@ -59,13 +59,17 @@ class FakeGraphTokenProvider:
         return "graph-token"
 
 
-class FakeToolExecutor:
-    def __init__(self, result: str = "tool result") -> None:
+class FakeToolProvider:
+    def __init__(self, result: str = "tool result", specs: list[dict] | None = None) -> None:
         self._result = result
+        self._specs = specs if specs is not None else []
         self.calls: list[tuple[ToolCallRequest, str]] = []
 
-    async def execute(self, tool_call: ToolCallRequest, access_token: str) -> str:
-        self.calls.append((tool_call, access_token))
+    async def get_tool_specs(self) -> list[dict]:
+        return self._specs
+
+    async def execute_tool(self, tool_call: ToolCallRequest, graph_access_token: str) -> str:
+        self.calls.append((tool_call, graph_access_token))
         return self._result
 
 
@@ -73,12 +77,12 @@ async def _drain(stream: AsyncIterator[str]) -> list[str]:
     return [chunk async for chunk in stream]
 
 
-def _make_use_case(chat_client, repository, token_provider=None, tool_executor=None):
+def _make_use_case(chat_client, repository, token_provider=None, tool_provider=None):
     return SendChatMessageUseCase(
         chat_client,
         repository,
         token_provider or FakeGraphTokenProvider(),
-        tool_executor or FakeToolExecutor(),
+        tool_provider or FakeToolProvider(),
     )
 
 
@@ -145,8 +149,8 @@ async def test_execute_with_tool_call_executes_tool_and_streams_final_answer():
     )
     repository = FakeConversationRepository()
     token_provider = FakeGraphTokenProvider()
-    tool_executor = FakeToolExecutor(result='[{"subject": "Hi"}]')
-    use_case = _make_use_case(fake_client, repository, token_provider, tool_executor)
+    tool_provider = FakeToolProvider(result='[{"subject": "Hi"}]')
+    use_case = _make_use_case(fake_client, repository, token_provider, tool_provider)
 
     conversation_id, stream = await use_case.execute(
         user_oid="user-1",
@@ -162,8 +166,8 @@ async def test_execute_with_tool_call_executes_tool_and_streams_final_answer():
     assert token_provider.last_call == ("user-1", "the-jwt")
 
     # The tool was actually executed with that token.
-    assert len(tool_executor.calls) == 1
-    executed_call, access_token = tool_executor.calls[0]
+    assert len(tool_provider.calls) == 1
+    executed_call, access_token = tool_provider.calls[0]
     assert executed_call.name == "list_recent_emails"
     assert access_token == "graph-token"
 

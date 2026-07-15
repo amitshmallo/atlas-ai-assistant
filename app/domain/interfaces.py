@@ -9,6 +9,7 @@ from app.domain.entities import (
     EmailDraft,
     EmailMessage,
     EmailSummary,
+    ToolCallRequest,
     UserProfile,
 )
 
@@ -79,6 +80,25 @@ class GraphCalendarClient(Protocol):
     tool call the model can trigger directly."""
 
     async def create_event(self, access_token: str, proposal: CalendarEventProposal) -> CalendarEvent: ...
+
+
+class ToolProvider(Protocol):
+    """Abstract boundary over tool discovery and execution. The concrete
+    implementation talks to one or more MCP servers over stdio — application
+    has no idea tools are backed by external processes at all, let alone
+    which ones, or that Graph is involved for any particular tool. Adding a
+    new tool means adding a server to the registry the implementation reads;
+    nothing here or in application/chat.py changes."""
+
+    async def get_tool_specs(self) -> list[dict[str, Any]]:
+        """OpenAI-format function specs, discovered dynamically from
+        whichever MCP servers are registered."""
+        ...
+
+    async def execute_tool(self, tool_call: ToolCallRequest, graph_access_token: str) -> str:
+        """Dispatches to whichever server exposes this tool. Tools that
+        don't need Graph simply ignore the token."""
+        ...
 
 
 class ConversationRepository(Protocol):

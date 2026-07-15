@@ -1,8 +1,7 @@
 from collections.abc import AsyncIterator
 
-from app.application.graph_tools import TOOL_SPECS, GraphToolExecutor
 from app.domain.entities import ATLAS_SYSTEM_PROMPT, ChatMessage
-from app.domain.interfaces import ChatClient, ConversationRepository, GraphTokenProvider
+from app.domain.interfaces import ChatClient, ConversationRepository, GraphTokenProvider, ToolProvider
 
 _RECENT_HISTORY_LIMIT = 20
 
@@ -22,8 +21,9 @@ class SendChatMessageUseCase:
 
     Tool calling is a two-step protocol: first ask the model (non-streaming,
     since we need the full response to see `tool_calls`); if it wants to
-    call tools, execute them via GraphToolExecutor and ask again — this
-    second call is streamed, since it's the actual answer the user reads.
+    call tools, execute them via the ToolProvider (backed by MCP servers —
+    application has no idea) and ask again — this second call is streamed,
+    since it's the actual answer the user reads.
     """
 
     def __init__(
@@ -31,12 +31,12 @@ class SendChatMessageUseCase:
         chat_client: ChatClient,
         conversation_repository: ConversationRepository,
         graph_token_provider: GraphTokenProvider,
-        tool_executor: GraphToolExecutor,
+        tool_provider: ToolProvider,
     ) -> None:
         self._chat_client = chat_client
         self._conversation_repository = conversation_repository
         self._graph_token_provider = graph_token_provider
-        self._tool_executor = tool_executor
+        self._tool_provider = tool_provider
 
     async def execute(
         self,
@@ -65,7 +65,8 @@ class SendChatMessageUseCase:
             ChatMessage(role="user", content=user_message),
         ]
 
-        result = await self._chat_client.complete_with_tools(messages, TOOL_SPECS)
+        tool_specs = await self._tool_provider.get_tool_specs()
+        result = await self._chat_client.complete_with_tools(messages, tool_specs)
 
         if not result.tool_calls:
             return conversation_id, self._persist_single_reply(conversation_id, result.content or "")
@@ -78,7 +79,7 @@ class SendChatMessageUseCase:
 
         graph_token = await self._graph_token_provider.get_graph_token(user_oid, user_assertion)
         for tool_call in result.tool_calls:
-            tool_result = await self._tool_executor.execute(tool_call, graph_token)
+            tool_result = await self._tool_provider.execute_tool(tool_call, graph_token)
             tool_message = ChatMessage(
                 role="tool", content=tool_result, tool_call_id=tool_call.id, name=tool_call.name
             )

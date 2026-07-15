@@ -6,6 +6,7 @@ Phase 3: Azure deployment (Container Apps, Key Vault, Postgres, Redis, ACR) via 
 Phase 4: LLM integration — streaming chat via Azure OpenAI (AI Foundry).
 Phase 5: Conversation memory — Postgres-backed history, Redis cache-aside.
 Phase 6: Email/calendar tools — Graph-backed OpenAI tool calling.
+Phase 7: MCP integration — tools extracted into standalone MCP servers.
 
 See the full PRD/phased plan at `.claude/plans/project-atlas-calm-ember.md` (or wherever it was saved).
 
@@ -75,6 +76,41 @@ to history, then `stream_completion` runs a second time for the actual
 streamed answer. If the model doesn't need tools, its first response is
 used directly (not streamed token-by-token, since the round trip that
 detects tool calls only returns a complete response either way).
+
+### MCP integration (Phase 7)
+
+Phase 6's tools moved out of `app/application/graph_tools.py` (deleted) into
+standalone MCP servers under `mcp_servers/`:
+
+- `mcp_servers/graph_server.py` — the four email/calendar tools, reusing the
+  same `HttpxGraphMailClient` from Phase 6, unchanged
+- `mcp_servers/notes_server.py` — a trivial one-tool stub that exists purely
+  to prove extensibility (see below)
+
+`app/infrastructure/mcp_tool_provider.py`'s `McpToolProvider` is now the only
+thing `SendChatMessageUseCase` talks to (via the `domain.ToolProvider`
+interface) — it spawns each registered server as a subprocess over stdio,
+discovers its tools dynamically via `list_tools()`, and dispatches calls via
+`call_tool()`. **`application/chat.py` has zero knowledge that Graph, or any
+external process, is involved at all.**
+
+The server registry lives in `app/infrastructure/mcp_registry.py` — a plain
+list of `(name, command, args, env_keys)`. To prove you can add a tool
+without touching the orchestrator: `notes_server.py`'s `remember_note` tool
+is registered there and Just Works in chat, with no changes anywhere else.
+Try asking Atlas to "remember that I prefer concise replies" — it'll call
+`remember_note` exactly like any Graph tool.
+
+The Graph access token is injected into the server subprocess via the
+`GRAPH_ACCESS_TOKEN` environment variable at spawn time — never exposed to
+the model as a tool argument it could see or fill in itself.
+
+This phase is a pure refactor: chat behavior is identical to Phase 6 (live-
+verified), the only thing that changed is *how* tools are wired in. Each
+tool call spawns a fresh subprocess rather than reusing a persistent
+connection — a deliberate simplicity-over-performance tradeoff; a pooled/
+persistent MCP session would be a reasonable Phase 10-style optimization,
+not something needed to prove the architecture.
 
 ## Tests
 
