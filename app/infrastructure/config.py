@@ -15,7 +15,13 @@ class Settings(BaseSettings):
     entra_tenant_id: str = ""
     entra_api_client_id: str = ""  # the API's own App ID (JWT audience)
     entra_api_client_secret: str = ""  # used for the On-Behalf-Of exchange
-    graph_scopes: list[str] = ["https://graph.microsoft.com/User.Read"]
+    # Mail.ReadWrite (not Mail.Send) is what createReply/draft endpoints need —
+    # Atlas never sends mail, so Mail.Send is deliberately not requested.
+    graph_scopes: list[str] = [
+        "https://graph.microsoft.com/User.Read",
+        "https://graph.microsoft.com/Mail.ReadWrite",
+        "https://graph.microsoft.com/Calendars.ReadWrite",
+    ]
 
     # Azure OpenAI (via Azure AI Foundry)
     azure_openai_endpoint: str = ""

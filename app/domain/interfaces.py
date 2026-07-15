@@ -1,7 +1,16 @@
 from collections.abc import AsyncIterator
-from typing import Protocol
+from typing import Any, Protocol
 
-from app.domain.entities import ChatMessage, UserProfile
+from app.domain.entities import (
+    CalendarEvent,
+    CalendarEventProposal,
+    ChatCompletionResult,
+    ChatMessage,
+    EmailDraft,
+    EmailMessage,
+    EmailSummary,
+    UserProfile,
+)
 
 
 class HealthCheckRepository(Protocol):
@@ -35,6 +44,41 @@ class ChatClient(Protocol):
     on the concrete Azure OpenAI SDK implementation."""
 
     def stream_completion(self, messages: list[ChatMessage]) -> AsyncIterator[str]: ...
+
+    async def complete_with_tools(
+        self, messages: list[ChatMessage], tools: list[dict[str, Any]]
+    ) -> ChatCompletionResult:
+        """Non-streaming: the model either answers directly or asks to call
+        one or more tools. Tool-calling needs the full response to inspect
+        `tool_calls`, so this can't be a stream — the final natural-language
+        reply (after tool results are fed back) uses stream_completion."""
+        ...
+
+
+class GraphMailClient(Protocol):
+    """Abstract boundary over Microsoft Graph mail endpoints."""
+
+    async def list_recent_emails(
+        self, access_token: str, top: int, unread_only: bool
+    ) -> list[EmailSummary]: ...
+
+    async def get_email(self, access_token: str, message_id: str) -> EmailMessage: ...
+
+    async def create_draft_reply(
+        self, access_token: str, message_id: str, body: str
+    ) -> EmailDraft:
+        """Creates a reply draft in the user's Drafts folder. Never sends
+        it — sending would require a separate, explicit user action that
+        no tool call can trigger on its own."""
+        ...
+
+
+class GraphCalendarClient(Protocol):
+    """Abstract boundary over Microsoft Graph calendar endpoints. Only
+    invoked by the explicit calendar-confirmation endpoint — never by a
+    tool call the model can trigger directly."""
+
+    async def create_event(self, access_token: str, proposal: CalendarEventProposal) -> CalendarEvent: ...
 
 
 class ConversationRepository(Protocol):

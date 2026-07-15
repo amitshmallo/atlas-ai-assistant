@@ -5,6 +5,7 @@ Phase 2: Entra ID authentication + Microsoft Graph (On-Behalf-Of flow).
 Phase 3: Azure deployment (Container Apps, Key Vault, Postgres, Redis, ACR) via `azd`.
 Phase 4: LLM integration — streaming chat via Azure OpenAI (AI Foundry).
 Phase 5: Conversation memory — Postgres-backed history, Redis cache-aside.
+Phase 6: Email/calendar tools — Graph-backed OpenAI tool calling.
 
 See the full PRD/phased plan at `.claude/plans/project-atlas-calm-ember.md` (or wherever it was saved).
 
@@ -49,6 +50,32 @@ returns the stored history; both endpoints check the conversation's
 `user_oid` against the caller's token and 404 if they don't match, so one
 user can't read or write another user's conversation by guessing an id.
 
+### Email/calendar tools (Phase 6)
+
+`/chat` now gives the model four tools, dispatched via `GraphToolExecutor`
+(`app/application/graph_tools.py`):
+
+- `list_recent_emails`, `read_email` — read-only Graph calls
+- `draft_reply` — creates a reply **draft** in the user's Drafts folder via
+  Graph's `createReply` + a body PATCH; it never sends anything
+- `propose_calendar_event` — does **not** call Graph at all. It just returns
+  the proposed subject/start/end/attendees back into the conversation so the
+  model can present it and ask the user to confirm
+
+Actually creating a calendar event only happens via `POST /calendar/events`,
+a plain REST endpoint the frontend calls directly after the user reviews a
+proposal — the model has no way to trigger it itself. This is the
+"draft/propose, then explicit approval" pattern from `ATLAS_SYSTEM_PROMPT`
+made structurally impossible to bypass, rather than just prompted for.
+
+Tool-calling is a two-step protocol against Azure OpenAI: `complete_with_tools`
+(non-streaming, so the full `tool_calls` array is visible) runs first: if the
+model wants to call tools, they're executed and their results are appended
+to history, then `stream_completion` runs a second time for the actual
+streamed answer. If the model doesn't need tools, its first response is
+used directly (not streamed token-by-token, since the round trip that
+detects tool calls only returns a complete response either way).
+
 ## Tests
 
 ```bash
@@ -85,7 +112,7 @@ API, and your API exchanges that for a Graph token server-side.
    - Scope name: `access_as_user`
    - Who can consent: Admins and users
    - Add it.
-6. **API permissions** → **Add a permission** → **Microsoft Graph** → **Delegated permissions** → add `User.Read` (already there by default), `Mail.Read`, `Mail.Send`, `Calendars.ReadWrite`, `offline_access`. Click **Grant admin consent** if you're the tenant admin (you will be, on a personal/dev tenant).
+6. **API permissions** → **Add a permission** → **Microsoft Graph** → **Delegated permissions** → add `User.Read` (already there by default), `Mail.ReadWrite`, `Calendars.ReadWrite`, `offline_access`. Click **Grant admin consent** if you're the tenant admin (you will be, on a personal/dev tenant). (`Mail.ReadWrite`, not `Mail.Send` — Atlas creates reply drafts but never sends anything itself, so `Mail.Send` is deliberately not requested.)
 
 ### 2. Register the SPA app
 

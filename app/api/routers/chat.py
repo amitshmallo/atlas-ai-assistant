@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.api.auth_deps import get_current_user
+from app.api.auth_deps import AuthContext, get_auth_context, get_current_user
 from app.api.deps import get_conversation_repository, get_send_chat_message_use_case
 from app.application.chat import ConversationNotFoundError, SendChatMessageUseCase
 from app.domain.entities import AuthenticatedUser, ChatMessage
@@ -21,14 +21,15 @@ class ChatRequest(BaseModel):
 @router.post("/chat")
 async def post_chat(
     request: ChatRequest,
-    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    auth_context: Annotated[AuthContext, Depends(get_auth_context)],
     use_case: Annotated[SendChatMessageUseCase, Depends(get_send_chat_message_use_case)],
 ) -> StreamingResponse:
     try:
         conversation_id, stream = await use_case.execute(
-            user_oid=user.oid,
+            user_oid=auth_context.user.oid,
             conversation_id=request.conversation_id,
             user_message=request.message,
+            user_assertion=auth_context.raw_token,
         )
     except ConversationNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found") from exc

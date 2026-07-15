@@ -4,7 +4,7 @@ from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.entities import ChatMessage
+from app.domain.entities import ChatMessage, ToolCallRequest
 from app.infrastructure.conversation_models import ConversationModel, MessageModel
 
 _CACHE_TTL_SECONDS = 3600
@@ -43,7 +43,7 @@ class SqlAlchemyConversationRepository:
             .limit(limit)
         )
         rows = list(reversed(result.scalars().all()))
-        messages = [ChatMessage(role=row.role, content=row.content) for row in rows]
+        messages = [self._row_to_message(row) for row in rows]
 
         await self._redis.set(
             cache_key,
@@ -68,10 +68,23 @@ class SqlAlchemyConversationRepository:
                 conversation_id=conversation_id,
                 role=message.role,
                 content=message.content,
+                tool_calls=[tc.model_dump() for tc in message.tool_calls] if message.tool_calls else None,
+                tool_call_id=message.tool_call_id,
+                name=message.name,
             )
         )
         await self._session.commit()
         await self._redis.delete(self._cache_key(conversation_id))
+
+    @staticmethod
+    def _row_to_message(row: MessageModel) -> ChatMessage:
+        return ChatMessage(
+            role=row.role,
+            content=row.content,
+            tool_calls=[ToolCallRequest(**tc) for tc in row.tool_calls] if row.tool_calls else None,
+            tool_call_id=row.tool_call_id,
+            name=row.name,
+        )
 
     @staticmethod
     def _cache_key(conversation_id: str) -> str:

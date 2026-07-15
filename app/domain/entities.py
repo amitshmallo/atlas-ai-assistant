@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -30,9 +30,69 @@ class UserProfile(BaseModel):
     user_principal_name: str
 
 
+class ToolCallRequest(BaseModel):
+    """A single function call the model asked to make."""
+
+    id: str
+    name: str
+    arguments: dict[str, Any]
+
+
 class ChatMessage(BaseModel):
-    role: Literal["system", "user", "assistant"]
-    content: str
+    role: Literal["system", "user", "assistant", "tool"]
+    content: str | None = None
+    # Present on assistant messages that requested tool calls — must be
+    # echoed back verbatim on the next request per the OpenAI tool-calling
+    # protocol, so the model sees what it asked for.
+    tool_calls: list[ToolCallRequest] | None = None
+    # Present on role="tool" messages: which call this result answers.
+    tool_call_id: str | None = None
+    name: str | None = None
+
+
+class ChatCompletionResult(BaseModel):
+    content: str | None = None
+    tool_calls: list[ToolCallRequest] = []
+
+
+class EmailSummary(BaseModel):
+    id: str
+    subject: str
+    from_address: str | None = None
+    received_at: str | None = None
+    is_read: bool = False
+    preview: str = ""
+
+
+class EmailMessage(BaseModel):
+    id: str
+    subject: str
+    from_address: str | None = None
+    received_at: str | None = None
+    body: str = ""
+
+
+class EmailDraft(BaseModel):
+    id: str
+    status: str = "draft created — not sent"
+
+
+class CalendarEventProposal(BaseModel):
+    """A calendar event the assistant wants to create. Never sent to Graph
+    directly by the tool — only surfaced to the user for explicit
+    confirmation via a separate, non-LLM-triggered API call."""
+
+    subject: str
+    start: str
+    end: str
+    attendees: list[str] = []
+
+
+class CalendarEvent(BaseModel):
+    id: str
+    subject: str
+    start: str
+    end: str
 
 
 ATLAS_SYSTEM_PROMPT = (
