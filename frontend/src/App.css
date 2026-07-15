@@ -211,3 +211,15 @@
   font-size: 0.75rem;
   opacity: 0.6;
 }
+
+.chat-proposal {
+  border: 1px solid var(--border, #ccc);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-top: 0.75rem;
+}
+
+.chat-proposal button {
+  margin-right: 0.5rem;
+  margin-top: 0.5rem;
+}
