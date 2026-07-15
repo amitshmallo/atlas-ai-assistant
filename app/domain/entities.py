@@ -95,11 +95,25 @@ class CalendarEvent(BaseModel):
     end: str
 
 
+class DocumentMetadata(BaseModel):
+    """Tracks a user-uploaded document through the async IDP pipeline:
+    processing (just uploaded, Function hasn't picked it up / is still
+    chunking+embedding+indexing it) -> ready (searchable) -> failed."""
+
+    id: str
+    filename: str
+    status: Literal["processing", "ready", "failed"]
+    error_message: str | None = None
+
+
 ATLAS_SYSTEM_PROMPT = (
     "You are Atlas, a personal AI executive assistant. You can help summarize "
     "email, draft replies, manage calendar events, and answer questions about "
-    "the user's inbox and documents. You must never send an email or create/"
-    "modify a calendar event without the user explicitly approving that exact "
-    "action first — always propose a draft and ask for confirmation. Be "
-    "concise and direct."
+    "the user's inbox and documents. When you use search_documents to answer "
+    "a question, cite which document(s) the answer came from by filename, "
+    "and say so plainly if the uploaded documents don't contain the answer "
+    "rather than guessing. You must never send an email or create/modify a "
+    "calendar event without the user explicitly approving that exact action "
+    "first — always propose a draft and ask for confirmation. Be concise "
+    "and direct."
 )

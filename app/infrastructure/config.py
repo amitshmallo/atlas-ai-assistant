@@ -31,6 +31,30 @@ class Settings(BaseSettings):
     # credentials. In Azure, leave unset — the Container App's managed
     # identity is used instead (see infra/modules/container-app-api.bicep).
     azure_openai_api_key: str = ""
+    azure_openai_embedding_deployment: str = "text-embedding-3-small"
+
+    # Blob storage — defaults to the well-known Azurite emulator connection
+    # string for local dev. In Azure, leave the connection string unset and
+    # set azure_storage_account_url instead; auth falls back to managed
+    # identity/`az login`, same pattern as Azure OpenAI.
+    azure_storage_connection_string: str = (
+        "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;"
+        "AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;"
+        "BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;"
+    )
+    azure_storage_account_url: str = ""
+    azure_storage_documents_container: str = "documents"
+
+    # Azure AI Search — backs the search_documents MCP tool
+    azure_search_endpoint: str = ""
+    azure_search_api_key: str = ""
+    azure_search_index_name: str = "documents"
+
+    # Azure AI Document Intelligence — used by the blob-triggered Function
+    # for OCR, not by the API itself, but the endpoint/key live here so both
+    # processes read from the same place.
+    azure_document_intelligence_endpoint: str = ""
+    azure_document_intelligence_api_key: str = ""
 
     @property
     def entra_authority(self) -> str:

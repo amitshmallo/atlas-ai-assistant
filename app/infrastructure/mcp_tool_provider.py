@@ -16,8 +16,8 @@ class UnknownToolError(Exception):
 class McpToolProvider:
     """Concrete domain.ToolProvider implementation: talks to MCP servers
     over stdio instead of importing tool code directly. application only
-    ever calls get_tool_specs()/execute_tool() — it has no idea Graph, or
-    any external process, is involved.
+    ever calls get_tool_specs()/execute_tool() — it has no idea Graph,
+    Azure AI Search, or any external process, is involved.
 
     Each call spawns a fresh subprocess for whichever server owns the tool
     being discovered/executed. That's a deliberate simplicity-over-performance
@@ -33,9 +33,9 @@ class McpToolProvider:
 
     @asynccontextmanager
     async def _session(
-        self, server: McpServerConfig, graph_access_token: str | None
+        self, server: McpServerConfig, context: dict[str, str]
     ) -> AsyncIterator[ClientSession]:
-        env = {key: graph_access_token for key in server.env_keys if graph_access_token}
+        env = {key: context[key] for key in server.env_keys if key in context}
         params = StdioServerParameters(command=server.command, args=server.args, env=env or None)
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
@@ -48,7 +48,7 @@ class McpToolProvider:
 
         specs: list[dict[str, Any]] = []
         for server in self._registry:
-            async with self._session(server, graph_access_token=None) as session:
+            async with self._session(server, context={}) as session:
                 tools_result = await session.list_tools()
                 for tool in tools_result.tools:
                     self._tool_to_server[tool.name] = server
@@ -66,7 +66,7 @@ class McpToolProvider:
         self._cached_specs = specs
         return specs
 
-    async def execute_tool(self, tool_call: ToolCallRequest, graph_access_token: str) -> str:
+    async def execute_tool(self, tool_call: ToolCallRequest, context: dict[str, str]) -> str:
         if not self._tool_to_server:
             await self.get_tool_specs()
 
@@ -74,7 +74,7 @@ class McpToolProvider:
         if server is None:
             raise UnknownToolError(tool_call.name)
 
-        async with self._session(server, graph_access_token=graph_access_token) as session:
+        async with self._session(server, context=context) as session:
             result = await session.call_tool(tool_call.name, tool_call.arguments)
             text_parts = [block.text for block in result.content if hasattr(block, "text")]
             return "\n".join(text_parts) if text_parts else "{}"

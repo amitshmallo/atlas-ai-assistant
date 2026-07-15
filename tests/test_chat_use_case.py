@@ -63,13 +63,13 @@ class FakeToolProvider:
     def __init__(self, result: str = "tool result", specs: list[dict] | None = None) -> None:
         self._result = result
         self._specs = specs if specs is not None else []
-        self.calls: list[tuple[ToolCallRequest, str]] = []
+        self.calls: list[tuple[ToolCallRequest, dict]] = []
 
     async def get_tool_specs(self) -> list[dict]:
         return self._specs
 
-    async def execute_tool(self, tool_call: ToolCallRequest, graph_access_token: str) -> str:
-        self.calls.append((tool_call, graph_access_token))
+    async def execute_tool(self, tool_call: ToolCallRequest, context: dict) -> str:
+        self.calls.append((tool_call, context))
         return self._result
 
 
@@ -165,11 +165,13 @@ async def test_execute_with_tool_call_executes_tool_and_streams_final_answer():
     # The Graph token was exchanged using the inbound JWT, not a stored credential.
     assert token_provider.last_call == ("user-1", "the-jwt")
 
-    # The tool was actually executed with that token.
+    # The tool was actually executed with that token, plus the user_oid for
+    # tools (like document search) that need per-user isolation rather than
+    # a Graph credential.
     assert len(tool_provider.calls) == 1
-    executed_call, access_token = tool_provider.calls[0]
+    executed_call, context = tool_provider.calls[0]
     assert executed_call.name == "list_recent_emails"
-    assert access_token == "graph-token"
+    assert context == {"GRAPH_ACCESS_TOKEN": "graph-token", "USER_OID": "user-1"}
 
     # Full round trip persisted: user msg, assistant tool-call msg, tool result msg, final assistant msg.
     persisted_roles = [m.role for m in repository.messages[conversation_id]]

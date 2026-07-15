@@ -27,5 +27,15 @@ services:
       timeout: 5s
       retries: 5
 
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    restart: unless-stopped
+    command: "azurite --blobHost 0.0.0.0 --location /data --loose"
+    ports:
+      - "10000:10000"
+    volumes:
+      - azurite_data:/data
+
 volumes:
   postgres_data:
+  azurite_data:

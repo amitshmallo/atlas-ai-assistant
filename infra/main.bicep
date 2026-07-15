@@ -32,6 +32,7 @@ var resourceToken = toLower(uniqueString(subscription().id, environmentName, loc
 var tags = {
   'azd-env-name': environmentName
 }
+var databaseUrl = 'postgresql+asyncpg://atlasadmin:${postgresAdminPassword}@${postgres.outputs.fqdn}:5432/atlas'
 
 resource resourceGroup 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   name: 'rg-${environmentName}'
@@ -77,6 +78,36 @@ module aiFoundry 'modules/ai-foundry.bicep' = {
     location: location
     tags: tags
     modelVersion: aiFoundryModelVersion
+  }
+}
+
+module storageAccount 'modules/storage-account.bicep' = {
+  name: 'storage-account'
+  scope: resourceGroup
+  params: {
+    name: 'st${resourceToken}'
+    location: location
+    tags: tags
+  }
+}
+
+module aiSearch 'modules/ai-search.bicep' = {
+  name: 'ai-search'
+  scope: resourceGroup
+  params: {
+    name: 'srch-${resourceToken}'
+    location: location
+    tags: tags
+  }
+}
+
+module documentIntelligence 'modules/document-intelligence.bicep' = {
+  name: 'document-intelligence'
+  scope: resourceGroup
+  params: {
+    name: 'di-${resourceToken}'
+    location: location
+    tags: tags
   }
 }
 
@@ -134,7 +165,7 @@ module apiSecrets 'modules/key-vault-secrets.bicep' = {
   scope: resourceGroup
   params: {
     keyVaultName: keyVault.outputs.name
-    databaseUrl: 'postgresql+asyncpg://atlasadmin:${postgresAdminPassword}@${postgres.outputs.fqdn}:5432/atlas'
+    databaseUrl: databaseUrl
     entraApiClientSecret: entraApiClientSecret
   }
   dependsOn: [
@@ -156,7 +187,13 @@ module api 'modules/container-app-api.bicep' = {
     entraApiClientId: entraApiClientId
     azureOpenAiEndpoint: aiFoundry.outputs.endpoint
     azureOpenAiDeployment: 'gpt-5-mini'
+    azureOpenAiEmbeddingDeployment: 'text-embedding-3-small'
     aiFoundryAccountName: aiFoundry.outputs.name
+    storageAccountName: storageAccount.outputs.name
+    azureStorageAccountUrl: storageAccount.outputs.primaryBlobEndpoint
+    azureSearchEndpoint: aiSearch.outputs.endpoint
+    azureSearchIndexName: 'documents'
+    searchServiceName: aiSearch.outputs.name
   }
   dependsOn: [
     apiSecrets
@@ -164,8 +201,32 @@ module api 'modules/container-app-api.bicep' = {
   ]
 }
 
+module documentProcessorFunction 'modules/function-app.bicep' = {
+  name: 'document-processor-function'
+  scope: resourceGroup
+  params: {
+    name: 'func-docs-${resourceToken}'
+    location: location
+    tags: tags
+    storageAccountName: storageAccount.outputs.name
+    databaseUrl: databaseUrl
+    azureOpenAiEndpoint: aiFoundry.outputs.endpoint
+    azureOpenAiDeployment: 'gpt-5-mini'
+    azureOpenAiEmbeddingDeployment: 'text-embedding-3-small'
+    azureSearchEndpoint: aiSearch.outputs.endpoint
+    azureSearchIndexName: 'documents'
+    documentIntelligenceEndpoint: documentIntelligence.outputs.endpoint
+    aiFoundryAccountName: aiFoundry.outputs.name
+    documentIntelligenceAccountName: documentIntelligence.outputs.name
+    searchServiceName: aiSearch.outputs.name
+  }
+}
+
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = containerRegistry.outputs.loginServer
 output AZURE_KEY_VAULT_NAME string = keyVault.outputs.name
 output AZURE_KEY_VAULT_ENDPOINT string = keyVault.outputs.endpoint
 output SERVICE_API_URI string = api.outputs.uri
 output AZURE_RESOURCE_GROUP string = resourceGroup.name
+output DOCUMENT_PROCESSOR_FUNCTION_NAME string = documentProcessorFunction.outputs.name
+output AZURE_SEARCH_ENDPOINT string = aiSearch.outputs.endpoint
+output AZURE_STORAGE_ACCOUNT_NAME string = storageAccount.outputs.name

@@ -12,3 +12,7 @@ node_modules/
 dist/
 frontend/dist/
 *.log
+
+local.settings.json
+azure_functions/*/bin/
+azure_functions/*/obj/

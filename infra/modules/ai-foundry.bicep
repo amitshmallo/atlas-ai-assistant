@@ -9,6 +9,10 @@ param deploymentName string = 'gpt-5-mini'
 param modelName string = 'gpt-5-mini'
 param modelVersion string
 
+@description('Deployment name the AZURE_OPENAI_EMBEDDING_DEPLOYMENT setting points at, used by the docs MCP server and the document-processing Function')
+param embeddingDeploymentName string = 'text-embedding-3-small'
+param embeddingModelVersion string = '1'
+
 resource account 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
   name: name
   location: location
@@ -40,6 +44,25 @@ resource deployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01
       version: modelVersion
     }
   }
+}
+
+resource embeddingDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
+  parent: account
+  name: embeddingDeploymentName
+  sku: {
+    name: 'Standard'
+    capacity: 10
+  }
+  properties: {
+    model: {
+      format: 'OpenAI'
+      name: embeddingDeploymentName
+      version: embeddingModelVersion
+    }
+  }
+  dependsOn: [
+    deployment
+  ]
 }
 
 output endpoint string = account.properties.endpoint

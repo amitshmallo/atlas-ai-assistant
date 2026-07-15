@@ -39,7 +39,7 @@ async def test_execute_tool_calls_real_subprocess():
     await provider.get_tool_specs()
 
     tool_call = ToolCallRequest(id="call-1", name="remember_note", arguments={"text": "buy milk"})
-    result = await provider.execute_tool(tool_call, graph_access_token="unused")
+    result = await provider.execute_tool(tool_call, context={})
 
     assert "buy milk" in result
 
@@ -51,4 +51,4 @@ async def test_execute_tool_raises_for_unknown_tool_name():
     tool_call = ToolCallRequest(id="call-1", name="not_a_real_tool", arguments={})
 
     with pytest.raises(UnknownToolError):
-        await provider.execute_tool(tool_call, graph_access_token="unused")
+        await provider.execute_tool(tool_call, context={})

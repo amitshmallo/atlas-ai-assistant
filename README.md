@@ -7,6 +7,7 @@ Phase 4: LLM integration — streaming chat via Azure OpenAI (AI Foundry).
 Phase 5: Conversation memory — Postgres-backed history, Redis cache-aside.
 Phase 6: Email/calendar tools — Graph-backed OpenAI tool calling.
 Phase 7: MCP integration — tools extracted into standalone MCP servers.
+Phase 8: RAG & document processing — blob upload, async OCR/embed/index pipeline, document search tool.
 
 See the full PRD/phased plan at `.claude/plans/project-atlas-calm-ember.md` (or wherever it was saved).
 
@@ -111,6 +112,75 @@ tool call spawns a fresh subprocess rather than reusing a persistent
 connection — a deliberate simplicity-over-performance tradeoff; a pooled/
 persistent MCP session would be a reasonable Phase 10-style optimization,
 not something needed to prove the architecture.
+
+### RAG & document processing (Phase 8)
+
+Event-driven, exactly per the plan: `POST /documents` (`app/api/routers/documents.py`)
+only uploads the raw file to Blob Storage and writes a `processing` row to
+Postgres (`documents` table) — it returns immediately, it does **not** wait
+for OCR. Everything slow happens asynchronously in a separate,
+independently-scaled process:
+
+```
+POST /documents → Blob Storage (documents/{user_oid}/{document_id}-{filename})
+                → triggers azure_functions/document_processor (blob trigger)
+                       → Document Intelligence (OCR) → chunk_text() → embed each
+                         chunk (Azure OpenAI) → index in Azure AI Search
+                         (+ user_oid on every chunk) → flip Postgres row to
+                         ready/failed
+```
+
+`GET /documents` lets the frontend poll a document's status. Once a
+document is `ready`, `mcp_servers/docs_server.py` (a fourth MCP server,
+registered exactly like `notes_server.py` — zero orchestrator changes)
+exposes a `search_documents` tool: it embeds the user's question, does a
+vector search against Azure AI Search filtered to `user_oid eq '<caller>'`,
+and returns matching chunks with their source filename so the model can
+cite them (`ATLAS_SYSTEM_PROMPT` explicitly asks it to).
+
+**Isolation, not credentials**: every user's chunks live in the *same*
+Azure AI Search index — there's no per-user index — isolation is enforced
+entirely by the `user_oid` filter applied at query time. This is why
+`ToolProvider.execute_tool` takes a `context: dict[str, str]` now instead
+of a single Graph token: the docs server needs `USER_OID` injected as an
+env var the same way the graph server needs `GRAPH_ACCESS_TOKEN`, and both
+are things the model must never see or supply itself.
+
+`azure_functions/document_processor/chunking.py` holds the two pure
+functions (`chunk_text`, `parse_blob_path`) with zero Azure imports,
+specifically so they're unit-testable without the Functions runtime or any
+Azure SDK — see `tests/test_document_chunking.py`.
+
+**Running/deploying the Function is not covered by local `uvicorn`/`docker
+compose` testing** — it's a separate deployable unit. To run it locally:
+
+```bash
+cd azure_functions/document_processor
+cp local.settings.json.example local.settings.json   # fill in the Azure endpoints/keys
+pip install -r requirements.txt
+func start   # requires Azure Functions Core Tools: `npm i -g azure-functions-core-tools@4`
+```
+
+You'll also need to provision, in the Azure Portal (same pattern as the
+AI Foundry setup — a resource group, no admin-tenant gymnastics this time):
+
+- **Azure AI Search** — any tier with vector search (Basic and above)
+- **Azure AI Document Intelligence** — `S0` tier, `FormRecognizer` kind
+- A **Blob Storage container** named `documents` (Azurite covers this
+  locally; `docker compose up -d` already starts it)
+
+Then fill in `.env`: `AZURE_SEARCH_ENDPOINT`, `AZURE_SEARCH_API_KEY` (or
+leave blank to use `az login`/managed identity like Azure OpenAI),
+`AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT`, `AZURE_DOCUMENT_INTELLIGENCE_API_KEY`.
+The Azure AI Search index itself doesn't need to be created manually — the
+Function creates it on first run if it doesn't exist (see `_ensure_index_exists`
+in `function_app.py`).
+
+This phase's code is fully unit-tested (chunking/parsing logic, the upload
+use case, the docs server's tool dispatch, the generalized `ToolProvider`
+context) but **not yet live-tested end-to-end** — that needs the AI
+Search/Document Intelligence resources provisioned and the Function
+actually running, same category of manual setup as Phases 2/4/6 before them.
 
 ## Tests
 

@@ -5,6 +5,7 @@ from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.infrastructure import conversation_models  # noqa: F401 — registers models on Base.metadata
+from app.infrastructure import document_models  # noqa: F401 — registers models on Base.metadata
 from app.infrastructure.config import settings
 from app.infrastructure.database import Base
 

@@ -78,8 +78,9 @@ class SendChatMessageUseCase:
         await self._conversation_repository.append_message(conversation_id, assistant_tool_message)
 
         graph_token = await self._graph_token_provider.get_graph_token(user_oid, user_assertion)
+        tool_context = {"GRAPH_ACCESS_TOKEN": graph_token, "USER_OID": user_oid}
         for tool_call in result.tool_calls:
-            tool_result = await self._tool_provider.execute_tool(tool_call, graph_token)
+            tool_result = await self._tool_provider.execute_tool(tool_call, tool_context)
             tool_message = ChatMessage(
                 role="tool", content=tool_result, tool_call_id=tool_call.id, name=tool_call.name
             )

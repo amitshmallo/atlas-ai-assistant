@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routers.calendar import router as calendar_router
 from app.api.routers.chat import router as chat_router
+from app.api.routers.documents import router as documents_router
 from app.api.routers.health import router as health_router
 from app.api.routers.me import router as me_router
 from app.infrastructure.config import settings
@@ -25,6 +26,7 @@ def create_app() -> FastAPI:
     app.include_router(me_router)
     app.include_router(chat_router)
     app.include_router(calendar_router)
+    app.include_router(documents_router)
 
     return app
 

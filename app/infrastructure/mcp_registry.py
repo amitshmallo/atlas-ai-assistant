@@ -35,4 +35,12 @@ MCP_SERVER_REGISTRY: list[McpServerConfig] = [
         command=sys.executable,
         args=[_server_script("notes_server.py")],
     ),
+    McpServerConfig(
+        name="docs",
+        command=sys.executable,
+        args=[_server_script("docs_server.py")],
+        # Isolation, not credentials — every user's chunks live in the same
+        # Azure AI Search index, filtered by user_oid at query time.
+        env_keys=["USER_OID"],
+    ),
 ]

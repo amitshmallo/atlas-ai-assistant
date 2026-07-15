@@ -8,9 +8,12 @@ from app.application.chat import SendChatMessageUseCase
 from app.application.create_calendar_event import CreateCalendarEventUseCase
 from app.application.graph_profile import GetMyProfileUseCase
 from app.application.health import GetHealthStatusUseCase
+from app.application.upload_document import UploadDocumentUseCase
+from app.infrastructure.blob_storage_client import AzureBlobStorageClient
 from app.infrastructure.chat_client import AzureOpenAIChatClient
 from app.infrastructure.conversation_repository import SqlAlchemyConversationRepository
 from app.infrastructure.database import get_session
+from app.infrastructure.document_repository import SqlAlchemyDocumentRepository
 from app.infrastructure.graph_calendar_client import HttpxGraphCalendarClient
 from app.infrastructure.graph_client import HttpxGraphClient
 from app.infrastructure.health_repository import SqlAlchemyHealthCheckRepository
@@ -61,3 +64,13 @@ def get_create_calendar_event_use_case() -> CreateCalendarEventUseCase:
     token_provider = MsalOboTokenProvider(redis_client)
     calendar_client = HttpxGraphCalendarClient()
     return CreateCalendarEventUseCase(token_provider, calendar_client)
+
+
+def get_document_repository(session: SessionDep) -> SqlAlchemyDocumentRepository:
+    return SqlAlchemyDocumentRepository(session)
+
+
+def get_upload_document_use_case(session: SessionDep) -> UploadDocumentUseCase:
+    document_repository = SqlAlchemyDocumentRepository(session)
+    blob_storage_client = AzureBlobStorageClient()
+    return UploadDocumentUseCase(document_repository, blob_storage_client)
