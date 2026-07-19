@@ -1,10 +1,7 @@
 import { useState } from 'react'
-import {
-  InteractionRequiredAuthError,
-  type AccountInfo,
-  type IPublicClientApplication,
-} from '@azure/msal-browser'
-import { apiBaseUrl, apiLoginRequest } from './authConfig'
+import type { AccountInfo, IPublicClientApplication } from '@azure/msal-browser'
+import { apiBaseUrl } from './authConfig'
+import { acquireApiToken } from './apiAuth'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -24,17 +21,6 @@ interface CalendarEventProposal {
   start: string
   end: string
   attendees: string[]
-}
-
-async function acquireApiToken(instance: IPublicClientApplication, account: AccountInfo) {
-  try {
-    return await instance.acquireTokenSilent({ ...apiLoginRequest, account })
-  } catch (silentError) {
-    if (silentError instanceof InteractionRequiredAuthError) {
-      return await instance.acquireTokenPopup(apiLoginRequest)
-    }
-    throw silentError
-  }
 }
 
 // After a turn completes, look back through history (only within this

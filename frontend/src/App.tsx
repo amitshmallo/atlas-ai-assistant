@@ -7,6 +7,7 @@ import {
 import { InteractionRequiredAuthError } from '@azure/msal-browser'
 import { apiBaseUrl, apiLoginRequest } from './authConfig'
 import { Chat } from './Chat'
+import { Documents } from './Documents'
 import './App.css'
 
 interface Profile {
@@ -69,6 +70,9 @@ function App() {
 
         {error && <p style={{ color: 'red' }}>{error}</p>}
         {profile && <pre>{JSON.stringify(profile, null, 2)}</pre>}
+
+        <hr />
+        {accounts[0] && <Documents instance={instance} account={accounts[0]} />}
 
         <hr />
         {accounts[0] && <Chat instance={instance} account={accounts[0]} />}

@@ -223,3 +223,30 @@
   margin-right: 0.5rem;
   margin-top: 0.5rem;
 }
+
+.documents-upload {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.documents-list {
+  list-style: none;
+  padding: 0;
+  text-align: left;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.documents-item {
+  padding: 0.25rem 0;
+}
+
+.documents-item-ready {
+  color: #2e7d32;
+}
+
+.documents-item-failed {
+  color: #c62828;
+}
