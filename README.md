@@ -8,6 +8,7 @@ Phase 5: Conversation memory — Postgres-backed history, Redis cache-aside.
 Phase 6: Email/calendar tools — Graph-backed OpenAI tool calling.
 Phase 7: MCP integration — tools extracted into standalone MCP servers.
 Phase 8: RAG & document processing — blob upload, async OCR/embed/index pipeline, document search tool.
+Phase 9: Long-term memory — durable preferences, auto-loaded every turn.
 
 See the full PRD/phased plan at `.claude/plans/project-atlas-calm-ember.md` (or wherever it was saved).
 
@@ -181,6 +182,42 @@ use case, the docs server's tool dispatch, the generalized `ToolProvider`
 context) but **not yet live-tested end-to-end** — that needs the AI
 Search/Document Intelligence resources provisioned and the Function
 actually running, same category of manual setup as Phases 2/4/6 before them.
+
+A frontend upload UI ([Documents.tsx](frontend/src/Documents.tsx)) drives
+`POST /documents`, shows each document's status, and polls every 4s while
+anything is still `processing`.
+
+### Long-term memory (Phase 9)
+
+Preferences are durable facts about the user (`preferences` table:
+`user_oid`, `key`, `value`, unique on `user_oid`+`key`) that persist across
+brand-new conversations — not just conversation history, which only
+applies within one conversation.
+
+The key design choice: **reading preferences is not a tool.** A brand-new
+conversation has no reason to know a `get_preferences` tool exists, so
+nothing would ever call it — the whole point of "long-term" memory is that
+it applies automatically. Instead `SendChatMessageUseCase` loads
+preferences directly via `PreferenceRepository` and appends them to the
+system prompt on every single turn, the same way conversation history is
+loaded — before the model is ever asked anything.
+
+**Writing** a preference, on the other hand, genuinely is a model decision
+— the assistant has to judge "is this worth remembering long-term or just
+for this message?" — so that's a tool: `mcp_servers/memory_server.py`
+exposes `remember_preference(key, value)`, registered in the MCP registry
+exactly like `notes_server.py` and `docs_server.py` before it. `USER_OID`
+is injected the same way it is for the docs server, so preferences are
+naturally isolated per user without the model ever handling an identifier
+itself.
+
+Verified two ways: `test_execute_injects_preferences_into_system_prompt_without_a_tool_call`
+proves the auto-load happens with zero tool calls involved, and
+`test_preference_repository.py` runs against the real Postgres container
+to prove the upsert (`ON CONFLICT ... DO UPDATE`) actually works, not just
+that the SQL is well-formed. Live proof — state a preference in one
+conversation, start a brand-new one, confirm it still applies — needs a
+running chat session and hasn't been done yet in this session.
 
 ## Tests
 

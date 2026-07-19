@@ -11,6 +11,7 @@ from app.domain.entities import (
     EmailMessage,
     EmailSummary,
     ToolCallRequest,
+    UserPreference,
     UserProfile,
 )
 
@@ -135,6 +136,21 @@ class DocumentRepository(Protocol):
     async def get_owner(self, document_id: str) -> str | None:
         """Returns the user_oid that owns this document, or None if it
         doesn't exist — same ownership-check pattern as ConversationRepository."""
+        ...
+
+
+class PreferenceRepository(Protocol):
+    """Abstract boundary over durable user preferences (Postgres). Unlike
+    tool results, preferences are loaded directly by SendChatMessageUseCase
+    into the system prompt on every turn — not gated behind a tool call —
+    so a preference stated once actually influences a brand-new
+    conversation automatically, which is the whole point of this being
+    "long-term" memory rather than just more conversation history."""
+
+    async def get_preferences(self, user_oid: str) -> list[UserPreference]: ...
+
+    async def set_preference(self, user_oid: str, key: str, value: str) -> None:
+        """Upserts — setting an existing key's value again just updates it."""
         ...
 
 

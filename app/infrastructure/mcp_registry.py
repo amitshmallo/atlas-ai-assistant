@@ -43,4 +43,10 @@ MCP_SERVER_REGISTRY: list[McpServerConfig] = [
         # Azure AI Search index, filtered by user_oid at query time.
         env_keys=["USER_OID"],
     ),
+    McpServerConfig(
+        name="memory",
+        command=sys.executable,
+        args=[_server_script("memory_server.py")],
+        env_keys=["USER_OID"],
+    ),
 ]

@@ -1,7 +1,13 @@
 from collections.abc import AsyncIterator
 
 from app.domain.entities import ATLAS_SYSTEM_PROMPT, ChatMessage
-from app.domain.interfaces import ChatClient, ConversationRepository, GraphTokenProvider, ToolProvider
+from app.domain.interfaces import (
+    ChatClient,
+    ConversationRepository,
+    GraphTokenProvider,
+    PreferenceRepository,
+    ToolProvider,
+)
 
 _RECENT_HISTORY_LIMIT = 20
 
@@ -24,6 +30,13 @@ class SendChatMessageUseCase:
     call tools, execute them via the ToolProvider (backed by MCP servers —
     application has no idea) and ask again — this second call is streamed,
     since it's the actual answer the user reads.
+
+    Long-term memory (Phase 9) is loaded directly here, not via a tool —
+    unlike Graph/docs tools that only run when the model decides to call
+    them, preferences must apply to every turn of every conversation,
+    including a brand-new one that has no reason to know to ask for them.
+    Writing a new preference IS a tool (mcp_servers/memory_server.py),
+    since that's a decision the model makes; reading them back isn't.
     """
 
     def __init__(
@@ -32,11 +45,13 @@ class SendChatMessageUseCase:
         conversation_repository: ConversationRepository,
         graph_token_provider: GraphTokenProvider,
         tool_provider: ToolProvider,
+        preference_repository: PreferenceRepository,
     ) -> None:
         self._chat_client = chat_client
         self._conversation_repository = conversation_repository
         self._graph_token_provider = graph_token_provider
         self._tool_provider = tool_provider
+        self._preference_repository = preference_repository
 
     async def execute(
         self,
@@ -59,8 +74,14 @@ class SendChatMessageUseCase:
             conversation_id, ChatMessage(role="user", content=user_message)
         )
 
+        preferences = await self._preference_repository.get_preferences(user_oid)
+        system_prompt = ATLAS_SYSTEM_PROMPT
+        if preferences:
+            preferences_text = "\n".join(f"- {p.key}: {p.value}" for p in preferences)
+            system_prompt += f"\n\nRemembered preferences for this user:\n{preferences_text}"
+
         messages = [
-            ChatMessage(role="system", content=ATLAS_SYSTEM_PROMPT),
+            ChatMessage(role="system", content=system_prompt),
             *history,
             ChatMessage(role="user", content=user_message),
         ]

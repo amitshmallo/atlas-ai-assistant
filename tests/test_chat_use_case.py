@@ -3,7 +3,7 @@ from collections.abc import AsyncIterator
 import pytest
 
 from app.application.chat import ConversationNotFoundError, SendChatMessageUseCase
-from app.domain.entities import ChatCompletionResult, ChatMessage, ToolCallRequest
+from app.domain.entities import ChatCompletionResult, ChatMessage, ToolCallRequest, UserPreference
 
 
 class FakeChatClient:
@@ -73,16 +73,30 @@ class FakeToolProvider:
         return self._result
 
 
+class FakePreferenceRepository:
+    def __init__(self, preferences: list[UserPreference] | None = None) -> None:
+        self._preferences = preferences or []
+
+    async def get_preferences(self, user_oid: str) -> list[UserPreference]:
+        return self._preferences
+
+    async def set_preference(self, user_oid: str, key: str, value: str) -> None:
+        self._preferences.append(UserPreference(key=key, value=value))
+
+
 async def _drain(stream: AsyncIterator[str]) -> list[str]:
     return [chunk async for chunk in stream]
 
 
-def _make_use_case(chat_client, repository, token_provider=None, tool_provider=None):
+def _make_use_case(
+    chat_client, repository, token_provider=None, tool_provider=None, preference_repository=None
+):
     return SendChatMessageUseCase(
         chat_client,
         repository,
         token_provider or FakeGraphTokenProvider(),
         tool_provider or FakeToolProvider(),
+        preference_repository or FakePreferenceRepository(),
     )
 
 
@@ -184,3 +198,38 @@ async def test_execute_with_tool_call_executes_tool_and_streams_final_answer():
     assert fake_client.messages_seen_by_stream is not None
     assert fake_client.messages_seen_by_stream[-1].role == "tool"
     assert fake_client.messages_seen_by_stream[-1].content == '[{"subject": "Hi"}]'
+
+
+async def test_execute_injects_preferences_into_system_prompt_without_a_tool_call():
+    # This is the whole point of Phase 9: a preference stated in one
+    # conversation must apply automatically to a brand-new one — the model
+    # never has to remember to ask for it.
+    fake_client = FakeChatClient(completion=ChatCompletionResult(content="ok", tool_calls=[]))
+    repository = FakeConversationRepository()
+    preference_repository = FakePreferenceRepository(
+        [UserPreference(key="reply_style", value="concise")]
+    )
+    use_case = _make_use_case(fake_client, repository, preference_repository=preference_repository)
+
+    _, stream = await use_case.execute(
+        user_oid="user-1", conversation_id=None, user_message="hi", user_assertion="jwt"
+    )
+    await _drain(stream)
+
+    system_message = fake_client.messages_seen_by_complete[0]
+    assert system_message.role == "system"
+    assert "reply_style: concise" in system_message.content
+
+
+async def test_execute_with_no_preferences_omits_preferences_section():
+    fake_client = FakeChatClient(completion=ChatCompletionResult(content="ok", tool_calls=[]))
+    repository = FakeConversationRepository()
+    use_case = _make_use_case(fake_client, repository, preference_repository=FakePreferenceRepository([]))
+
+    _, stream = await use_case.execute(
+        user_oid="user-1", conversation_id=None, user_message="hi", user_assertion="jwt"
+    )
+    await _drain(stream)
+
+    system_message = fake_client.messages_seen_by_complete[0]
+    assert "Remembered preferences" not in system_message.content

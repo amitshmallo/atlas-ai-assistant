@@ -19,6 +19,7 @@ from app.infrastructure.graph_client import HttpxGraphClient
 from app.infrastructure.health_repository import SqlAlchemyHealthCheckRepository
 from app.infrastructure.mcp_tool_provider import McpToolProvider
 from app.infrastructure.obo_token_provider import MsalOboTokenProvider
+from app.infrastructure.preference_repository import SqlAlchemyPreferenceRepository
 from app.infrastructure.redis_client import redis_client
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -51,8 +52,13 @@ def _get_tool_provider() -> McpToolProvider:
 def get_send_chat_message_use_case(session: SessionDep) -> SendChatMessageUseCase:
     conversation_repository = SqlAlchemyConversationRepository(session, redis_client)
     token_provider = MsalOboTokenProvider(redis_client)
+    preference_repository = SqlAlchemyPreferenceRepository(session)
     return SendChatMessageUseCase(
-        _get_chat_client(), conversation_repository, token_provider, _get_tool_provider()
+        _get_chat_client(),
+        conversation_repository,
+        token_provider,
+        _get_tool_provider(),
+        preference_repository,
     )
 
 
