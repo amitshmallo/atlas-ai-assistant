@@ -1,11 +1,7 @@
 import { useState } from 'react'
-import {
-  AuthenticatedTemplate,
-  UnauthenticatedTemplate,
-  useMsal,
-} from '@azure/msal-react'
-import { InteractionRequiredAuthError } from '@azure/msal-browser'
+import { AuthenticatedTemplate, UnauthenticatedTemplate, useMsal } from '@azure/msal-react'
 import { apiBaseUrl, apiLoginRequest } from './authConfig'
+import { acquireApiToken } from './apiAuth'
 import { Chat } from './Chat'
 import { Documents } from './Documents'
 import './App.css'
@@ -28,27 +24,11 @@ function App() {
   const fetchMe = async () => {
     setError(null)
     try {
-      const account = accounts[0]
-      let tokenResponse
-      try {
-        tokenResponse = await instance.acquireTokenSilent({
-          ...apiLoginRequest,
-          account,
-        })
-      } catch (silentError) {
-        if (silentError instanceof InteractionRequiredAuthError) {
-          tokenResponse = await instance.acquireTokenPopup(apiLoginRequest)
-        } else {
-          throw silentError
-        }
-      }
-
+      const tokenResponse = await acquireApiToken(instance, accounts[0])
       const response = await fetch(`${apiBaseUrl}/me`, {
         headers: { Authorization: `Bearer ${tokenResponse.accessToken}` },
       })
-      if (!response.ok) {
-        throw new Error(`API returned ${response.status}`)
-      }
+      if (!response.ok) throw new Error(`API returned ${response.status}`)
       setProfile(await response.json())
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -57,25 +37,61 @@ function App() {
 
   return (
     <div className="app">
-      <h1>Atlas</h1>
-
       <UnauthenticatedTemplate>
-        <button onClick={signIn}>Sign in with Microsoft</button>
+        <header className="app-header">
+          <div>
+            <h1>Atlas</h1>
+            <p className="tagline">Your AI executive assistant</p>
+          </div>
+        </header>
+
+        <div className="signin-card">
+          <h2>Sign in to get started</h2>
+          <p>Atlas needs your Microsoft account to read email, manage your calendar, and answer questions about your documents.</p>
+          <button className="btn btn-primary" onClick={signIn}>
+            Sign in with Microsoft
+          </button>
+        </div>
       </UnauthenticatedTemplate>
 
       <AuthenticatedTemplate>
-        <p>Signed in as {accounts[0]?.username}</p>
-        <button onClick={fetchMe}>Fetch Graph profile via API</button>
-        <button onClick={signOut}>Sign out</button>
+        <header className="app-header">
+          <div>
+            <h1>Atlas</h1>
+            <p className="tagline">Your AI executive assistant</p>
+          </div>
+          <div className="app-user">
+            <span>{accounts[0]?.username}</span>
+            <button className="btn btn-ghost" onClick={signOut}>
+              Sign out
+            </button>
+          </div>
+        </header>
 
-        {error && <p style={{ color: 'red' }}>{error}</p>}
-        {profile && <pre>{JSON.stringify(profile, null, 2)}</pre>}
+        <section className="panel">
+          <div className="panel-header">
+            <h2>Account</h2>
+            <button className="btn" onClick={fetchMe}>
+              Fetch Graph profile
+            </button>
+          </div>
+          {error && <p className="error-text">{error}</p>}
+          {profile && <pre className="profile-json">{JSON.stringify(profile, null, 2)}</pre>}
+        </section>
 
-        <hr />
-        {accounts[0] && <Documents instance={instance} account={accounts[0]} />}
+        <section className="panel">
+          <div className="panel-header">
+            <h2>Documents</h2>
+          </div>
+          {accounts[0] && <Documents instance={instance} account={accounts[0]} />}
+        </section>
 
-        <hr />
-        {accounts[0] && <Chat instance={instance} account={accounts[0]} />}
+        <section className="panel">
+          <div className="panel-header">
+            <h2>Chat</h2>
+          </div>
+          {accounts[0] && <Chat instance={instance} account={accounts[0]} />}
+        </section>
       </AuthenticatedTemplate>
     </div>
   )

@@ -155,10 +155,12 @@ export function Chat({
       {conversationId && <p className="chat-conversation-id">Conversation: {conversationId}</p>}
 
       <div className="chat-history">
+        {messages.length === 0 && <p className="documents-empty">Ask Atlas about your email, calendar, or documents.</p>}
         {messages.map((message, index) => (
-          <p key={index} className={`chat-message chat-message-${message.role}`}>
-            <strong>{message.role === 'user' ? 'You' : 'Atlas'}:</strong> {message.content}
-          </p>
+          <div key={index} className={`chat-message chat-message-${message.role}`}>
+            <strong>{message.role === 'user' ? 'You' : 'Atlas'}</strong>
+            <span>{message.content}</span>
+          </div>
         ))}
       </div>
 
@@ -170,7 +172,7 @@ export function Chat({
           placeholder="Ask Atlas something..."
           disabled={isStreaming}
         />
-        <button onClick={send} disabled={isStreaming}>
+        <button className="btn btn-primary" onClick={send} disabled={isStreaming}>
           {isStreaming ? 'Sending...' : 'Send'}
         </button>
       </div>
@@ -183,13 +185,19 @@ export function Chat({
             {pendingProposal.start} → {pendingProposal.end}
             {pendingProposal.attendees.length > 0 && <> · {pendingProposal.attendees.join(', ')}</>}
           </p>
-          <button onClick={confirmProposal}>Confirm — create in calendar</button>
-          <button onClick={() => setPendingProposal(null)}>Dismiss</button>
+          <div className="chat-proposal-actions">
+            <button className="btn btn-primary" onClick={confirmProposal}>
+              Confirm — create in calendar
+            </button>
+            <button className="btn btn-ghost" onClick={() => setPendingProposal(null)}>
+              Dismiss
+            </button>
+          </div>
         </div>
       )}
-      {confirmStatus && <p className="chat-conversation-id">{confirmStatus}</p>}
+      {confirmStatus && <p className="chat-status-text">{confirmStatus}</p>}
 
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+      {error && <p className="error-text">{error}</p>}
     </div>
   )
 }

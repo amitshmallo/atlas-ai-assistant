@@ -83,21 +83,28 @@ export function Documents({
     <div className="documents">
       <div className="documents-upload">
         <input type="file" ref={fileInputRef} disabled={isUploading} />
-        <button onClick={upload} disabled={isUploading}>
+        <button className="btn btn-primary" onClick={upload} disabled={isUploading}>
           {isUploading ? 'Uploading...' : 'Upload'}
         </button>
       </div>
 
-      <ul className="documents-list">
-        {documents.map((doc) => (
-          <li key={doc.id} className={`documents-item documents-item-${doc.status}`}>
-            {doc.filename} — {doc.status}
-            {doc.status === 'failed' && doc.error_message && <> ({doc.error_message})</>}
-          </li>
-        ))}
-      </ul>
+      {documents.length === 0 ? (
+        <p className="documents-empty">No documents uploaded yet.</p>
+      ) : (
+        <ul className="documents-list">
+          {documents.map((doc) => (
+            <li key={doc.id} className="documents-item">
+              <span className="documents-filename">{doc.filename}</span>
+              <span className={`status-pill status-pill-${doc.status}`}>
+                {doc.status}
+                {doc.status === 'failed' && doc.error_message && ` · ${doc.error_message}`}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
 
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+      {error && <p className="error-text">{error}</p>}
     </div>
   )
 }
