@@ -10,6 +10,7 @@ Phase 7: MCP integration — tools extracted into standalone MCP servers.
 Phase 8: RAG & document processing — blob upload, async OCR/embed/index pipeline, document search tool.
 Phase 9: Long-term memory — durable preferences, auto-loaded every turn.
 Phase 10: Monitoring & secure networking — distributed tracing, VNet + private endpoints.
+Phase 11: CI/CD — GitHub Actions (lint, test, build) + OIDC deploy via azd.
 
 See the full PRD/phased plan at `.claude/plans/project-atlas-calm-ember.md` (or wherever it was saved).
 
@@ -291,6 +292,50 @@ like the rest of the Azure deployment story, has never actually been run
 via `azd up` — VNet integration and private DNS resolution are the most
 likely things in this whole project to need live debugging when that
 finally happens, more so than anything in Phases 3-9.
+
+### CI/CD (Phase 11)
+
+`.github/workflows/ci.yml` runs on every push/PR to `master`:
+
+- **`backend`** — spins up a real Postgres service container, runs `ruff
+  check`, applies Alembic migrations, then `pytest`. No Redis service is
+  needed: nothing in the test suite touches Redis directly (it's always
+  behind a fake in unit tests), and `Redis.from_url()` doesn't open a
+  connection until a command actually runs.
+- **`frontend`** — `npm ci` + `npm run build` (which is also the
+  TypeScript typecheck).
+- **`deploy`** — only on a push to `master` (not PRs), after both jobs
+  above pass. Runs `azd up` authenticated via **OIDC federated
+  credentials** — no client secret or long-lived Azure credential is ever
+  stored in GitHub, just a trust relationship between this specific repo/
+  branch and an Entra ID app registration.
+
+**The federated-credential setup hit a real cross-tenant snag worth
+recording.** The natural choice was registering the CI/CD app in the same
+`atlasdev123` tenant as the rest of this project's Entra ID setup (Phase
+2) — but the Azure *subscription* this deploys into lives in a different
+tenant (`post.bgu.ac.il`, the university-issued one, where student Azure
+credit actually lives). A service principal has to exist in the same
+tenant as whatever it's being granted a role on, and a single-tenant app's
+service principal can't be instantiated cross-tenant without an Entra
+admin's consent in the *target* tenant — which, same as the original
+Phase 2 blocker, this account doesn't have in `post.bgu.ac.il`. Making the
+app registration multi-tenant didn't resolve it either; `az ad sp create
+--id <foreign-app-id>` explicitly rejects instantiating a foreign app's
+service principal this way. The fix: register the CI/CD app **natively in
+`post.bgu.ac.il`** instead (a plain member account there, unlike
+`atlasdev123` where this account is a guest) — same four ARM/Graph
+primitives (`az ad app create` → `az ad sp create` →
+`az ad app federated-credential create` → role assignment), just all in
+the tenant that actually owns the subscription. The role assignment itself
+is scoped to a single resource group (`rg-atlas-dev`), not the whole
+subscription — least-privilege, and easy to verify blast radius by reading
+the one `az role assignment create` call in this history.
+
+Not yet verified: an actual passing `deploy` job. The very first `azd up`
+for this project happens inside this pipeline rather than a terminal —
+expect (per the pattern of literally every phase before this) some live
+debugging via the Actions log once it runs for real.
 
 ## Tests
 

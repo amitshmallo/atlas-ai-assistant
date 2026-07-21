@@ -35,7 +35,6 @@ def test_chunk_text_covers_the_whole_text():
 
     # Every character position ends up in at least one chunk.
     covered = set()
-    pos = 0
     start = 0
     for chunk in chunks:
         covered.update(range(start, start + len(chunk)))

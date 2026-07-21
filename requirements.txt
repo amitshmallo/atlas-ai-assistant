@@ -21,3 +21,4 @@ python-multipart>=0.0.12
 aiohttp>=3.10
 azure-monitor-opentelemetry>=1.6
 opentelemetry-instrumentation-httpx>=0.48
+ruff>=0.8
