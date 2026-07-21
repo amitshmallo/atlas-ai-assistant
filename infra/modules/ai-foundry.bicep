@@ -38,7 +38,7 @@ resource deployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01
   parent: account
   name: deploymentName
   sku: {
-    name: 'Standard'
+    name: 'GlobalStandard'
     capacity: 10
   }
   properties: {
@@ -54,7 +54,7 @@ resource embeddingDeployment 'Microsoft.CognitiveServices/accounts/deployments@2
   parent: account
   name: embeddingDeploymentName
   sku: {
-    name: 'Standard'
+    name: 'GlobalStandard'
     capacity: 10
   }
   properties: {

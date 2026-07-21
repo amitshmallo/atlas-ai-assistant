@@ -1,5 +1,7 @@
 param keyVaultName string
 param principalId string
+@allowed(['User', 'ServicePrincipal'])
+param principalType string = 'User'
 
 var keyVaultSecretsOfficerRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7')
 
@@ -13,6 +15,6 @@ resource deployerSecretsOfficer 'Microsoft.Authorization/roleAssignments@2022-04
   properties: {
     roleDefinitionId: keyVaultSecretsOfficerRoleId
     principalId: principalId
-    principalType: 'User'
+    principalType: principalType
   }
 }

@@ -25,6 +25,10 @@ param entraApiClientSecret string = ''
 @description('Principal ID of the identity running the deployment — azd injects this automatically so it can write Key Vault secrets under RBAC authorization')
 param principalId string = ''
 
+@description('Type of the deploying principal — a human running `azd up` locally is a User; the GitHub Actions federated identity is a ServicePrincipal')
+@allowed(['User', 'ServicePrincipal'])
+param principalType string = 'User'
+
 @description('Exact model version string for the gpt-5-mini deployment — check the AI Foundry portal or `az cognitiveservices account list-models` for the current value before deploying, since model versions get retired/replaced over time')
 param aiFoundryModelVersion string
 
@@ -150,6 +154,7 @@ module deployerKeyVaultAccess 'modules/key-vault-rbac.bicep' = {
   params: {
     keyVaultName: keyVault.outputs.name
     principalId: principalId
+    principalType: principalType
   }
 }
 
