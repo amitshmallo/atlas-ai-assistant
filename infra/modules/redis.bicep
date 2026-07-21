@@ -5,18 +5,24 @@ param tags object
 @description('Key Vault to write the redis-url secret into directly — the raw access key is never returned as a module output, since Bicep module outputs are persisted in plaintext in deployment history.')
 param keyVaultName string
 
-resource redis 'Microsoft.Cache/redis@2024-03-01' = {
+// Classic Azure Cache for Redis (Microsoft.Cache/redis) is retired for new
+// deployments — this is Azure Managed Redis, the replacement service.
+resource redis 'Microsoft.Cache/redisEnterprise@2024-09-01-preview' = {
   name: name
   location: location
   tags: tags
+  sku: {
+    name: 'Balanced_B0'
+  }
+}
+
+resource redisDatabase 'Microsoft.Cache/redisEnterprise/databases@2024-09-01-preview' = {
+  parent: redis
+  name: 'default'
   properties: {
-    sku: {
-      name: 'Basic'
-      family: 'C'
-      capacity: 0
-    }
-    enableNonSslPort: false
-    minimumTlsVersion: '1.2'
+    clusteringPolicy: 'NoCluster'
+    evictionPolicy: 'NoEviction'
+    port: 10000
   }
 }
 
@@ -28,10 +34,10 @@ resource redisUrlSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: keyVault
   name: 'redis-url'
   properties: {
-    value: 'rediss://:${redis.listKeys().primaryKey}@${redis.properties.hostName}:${redis.properties.sslPort}/0'
+    value: 'rediss://:${redisDatabase.listKeys().primaryKey}@${redis.properties.hostName}:${redisDatabase.properties.port}/0'
   }
 }
 
 output hostName string = redis.properties.hostName
-output sslPort int = redis.properties.sslPort
+output sslPort int = redisDatabase.properties.port
 output name string = redis.name

@@ -45,9 +45,12 @@ resource plan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: '${name}-plan'
   location: location
   tags: tags
+  // Y1/Dynamic (Consumption) isn't allowed for this subscription in this
+  // region — Basic B1 is broadly available and cheap enough for a portfolio
+  // project's occasional blob-triggered runs.
   sku: {
-    name: 'Y1'
-    tier: 'Dynamic'
+    name: 'B1'
+    tier: 'Basic'
   }
   kind: 'functionapp'
   properties: {
