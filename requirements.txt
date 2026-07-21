@@ -17,3 +17,5 @@ mcp>=1.9
 azure-storage-blob>=12.24
 azure-search-documents>=11.5
 azure-ai-documentintelligence>=1.0
+python-multipart>=0.0.12
+aiohttp>=3.10

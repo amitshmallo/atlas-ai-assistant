@@ -30,9 +30,14 @@ services:
   azurite:
     image: mcr.microsoft.com/azure-storage/azurite:latest
     restart: unless-stopped
-    command: "azurite --blobHost 0.0.0.0 --location /data --loose"
+    # --skipApiVersionCheck: the azure-storage-blob SDK sends newer Storage
+    # API versions than this pinned Azurite image recognizes; this flag is
+    # Azurite's documented workaround rather than pinning a specific image tag.
+    command: "azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --location /data --loose --skipApiVersionCheck"
     ports:
       - "10000:10000"
+      - "10001:10001"
+      - "10002:10002"
     volumes:
       - azurite_data:/data
 

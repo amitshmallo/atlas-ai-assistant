@@ -153,35 +153,56 @@ specifically so they're unit-testable without the Functions runtime or any
 Azure SDK — see `tests/test_document_chunking.py`.
 
 **Running/deploying the Function is not covered by local `uvicorn`/`docker
-compose` testing** — it's a separate deployable unit. To run it locally:
+compose` testing** — it's a separate deployable unit, with its own venv. To
+run it locally:
 
 ```bash
 cd azure_functions/document_processor
-cp local.settings.json.example local.settings.json   # fill in the Azure endpoints/keys
+py -3.11 -m venv .venv   # NOT 3.12 — see note below
+.venv\Scripts\activate
 pip install -r requirements.txt
+cp local.settings.json.example local.settings.json   # fill in the Azure endpoints/keys
 func start   # requires Azure Functions Core Tools: `npm i -g azure-functions-core-tools@4`
 ```
+
+**Use Python 3.11 for this venv, not 3.12.** The Azure Functions Python
+worker (as of Core Tools 4.12.1) hits `AttributeError:
+'_SixMetaPathImporter' object has no attribute '_path'` on startup under
+3.12 — a worker/importlib compatibility issue, not anything in this repo's
+code. 3.11 starts cleanly. The main FastAPI app has no such restriction and
+stays on 3.12.
 
 You'll also need to provision, in the Azure Portal (same pattern as the
 AI Foundry setup — a resource group, no admin-tenant gymnastics this time):
 
-- **Azure AI Search** — any tier with vector search (Basic and above)
+- **Azure AI Search** — **Free tier works** (it does support vector search,
+  just capped at 25 MB/3 indexes — plenty for testing)
 - **Azure AI Document Intelligence** — `S0` tier, `FormRecognizer` kind
+- **An embeddings model deployment** in the same AI Foundry project as your
+  chat model — deploy `text-embedding-3-small` with that exact deployment
+  name (matching `AZURE_OPENAI_EMBEDDING_DEPLOYMENT`). Easy to miss since
+  Phase 4 only walks through deploying the chat model — forgetting this
+  surfaces as a `DeploymentNotFound` error on the document once it fails.
 - A **Blob Storage container** named `documents` (Azurite covers this
-  locally; `docker compose up -d` already starts it)
+  locally; `docker compose up -d` already starts it) — the API creates the
+  container itself on first upload if it doesn't exist yet.
 
 Then fill in `.env`: `AZURE_SEARCH_ENDPOINT`, `AZURE_SEARCH_API_KEY` (or
 leave blank to use `az login`/managed identity like Azure OpenAI),
 `AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT`, `AZURE_DOCUMENT_INTELLIGENCE_API_KEY`.
-The Azure AI Search index itself doesn't need to be created manually — the
-Function creates it on first run if it doesn't exist (see `_ensure_index_exists`
-in `function_app.py`).
+The Azure AI Search *index* itself doesn't need to be created manually —
+the Function creates it on first run if it doesn't exist (see
+`_ensure_index_exists` in `function_app.py`).
 
-This phase's code is fully unit-tested (chunking/parsing logic, the upload
-use case, the docs server's tool dispatch, the generalized `ToolProvider`
-context) but **not yet live-tested end-to-end** — that needs the AI
-Search/Document Intelligence resources provisioned and the Function
-actually running, same category of manual setup as Phases 2/4/6 before them.
+**Live-verified end to end**: upload a PDF → Function processes it (OCR →
+chunk → embed → index) → status flips to `ready` → ask Atlas a question
+about it in chat → correctly cited answer. Getting there surfaced a few
+real gaps, now fixed: `python-multipart` and `aiohttp` were missing from
+`requirements.txt` (needed for file uploads and every async Azure SDK
+client's transport, respectively — FastAPI/the SDKs don't fail until you
+actually hit the code path that needs them), and the local Azurite image
+rejects newer Storage API versions the SDK sends by default, fixed with
+`--skipApiVersionCheck` in `docker-compose.yml`.
 
 A frontend upload UI ([Documents.tsx](frontend/src/Documents.tsx)) drives
 `POST /documents`, shows each document's status, and polls every 4s while
@@ -211,13 +232,12 @@ is injected the same way it is for the docs server, so preferences are
 naturally isolated per user without the model ever handling an identifier
 itself.
 
-Verified two ways: `test_execute_injects_preferences_into_system_prompt_without_a_tool_call`
-proves the auto-load happens with zero tool calls involved, and
+Verified three ways: `test_execute_injects_preferences_into_system_prompt_without_a_tool_call`
+proves the auto-load happens with zero tool calls involved,
 `test_preference_repository.py` runs against the real Postgres container
-to prove the upsert (`ON CONFLICT ... DO UPDATE`) actually works, not just
-that the SQL is well-formed. Live proof — state a preference in one
-conversation, start a brand-new one, confirm it still applies — needs a
-running chat session and hasn't been done yet in this session.
+to prove the upsert (`ON CONFLICT ... DO UPDATE`) actually works, and
+live-tested end to end — stated a preference in one conversation, started
+a brand-new one, confirmed it still applied.
 
 ## Tests
 
