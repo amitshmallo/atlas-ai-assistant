@@ -22,6 +22,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from mcp.server.fastmcp import FastMCP  # noqa: E402
 
 from app.infrastructure.graph_mail_client import HttpxGraphMailClient  # noqa: E402
+from app.infrastructure.telemetry import configure_telemetry, traced_subprocess_span  # noqa: E402
+
+configure_telemetry(service_name="atlas-mcp-graph")
 
 mcp = FastMCP("graph")
 _mail_client = HttpxGraphMailClient()
@@ -37,15 +40,17 @@ def _access_token() -> str:
 @mcp.tool()
 async def list_recent_emails(top: int = 5, unread_only: bool = True) -> str:
     """List the user's most recent emails, optionally filtered to unread only."""
-    summaries = await _mail_client.list_recent_emails(_access_token(), top=top, unread_only=unread_only)
-    return json.dumps([s.model_dump() for s in summaries])
+    with traced_subprocess_span("atlas-mcp-graph", "list_recent_emails"):
+        summaries = await _mail_client.list_recent_emails(_access_token(), top=top, unread_only=unread_only)
+        return json.dumps([s.model_dump() for s in summaries])
 
 
 @mcp.tool()
 async def read_email(message_id: str) -> str:
     """Read the full subject and body of one email by its id."""
-    email = await _mail_client.get_email(_access_token(), message_id)
-    return json.dumps(email.model_dump())
+    with traced_subprocess_span("atlas-mcp-graph", "read_email"):
+        email = await _mail_client.get_email(_access_token(), message_id)
+        return json.dumps(email.model_dump())
 
 
 @mcp.tool()
@@ -53,8 +58,9 @@ async def draft_reply(message_id: str, body: str) -> str:
     """Create a reply draft for an email in the user's Drafts folder.
     This never sends the email — it only saves a draft for the user to
     review and send themselves."""
-    draft = await _mail_client.create_draft_reply(_access_token(), message_id, body)
-    return json.dumps(draft.model_dump())
+    with traced_subprocess_span("atlas-mcp-graph", "draft_reply"):
+        draft = await _mail_client.create_draft_reply(_access_token(), message_id, body)
+        return json.dumps(draft.model_dump())
 
 
 @mcp.tool()
@@ -62,15 +68,16 @@ async def propose_calendar_event(subject: str, start: str, end: str, attendees: 
     """Propose a calendar event to the user. This does NOT create anything —
     it only returns the proposal so you can present it and ask the user to
     explicitly confirm before it's actually created."""
-    return json.dumps(
-        {
-            "subject": subject,
-            "start": start,
-            "end": end,
-            "attendees": attendees or [],
-            "status": "proposed — not created; ask the user to confirm via the app",
-        }
-    )
+    with traced_subprocess_span("atlas-mcp-graph", "propose_calendar_event"):
+        return json.dumps(
+            {
+                "subject": subject,
+                "start": start,
+                "end": end,
+                "attendees": attendees or [],
+                "status": "proposed — not created; ask the user to confirm via the app",
+            }
+        )
 
 
 if __name__ == "__main__":

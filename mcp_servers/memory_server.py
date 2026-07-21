@@ -18,6 +18,9 @@ from mcp.server.fastmcp import FastMCP  # noqa: E402
 
 from app.infrastructure.database import async_session_factory  # noqa: E402
 from app.infrastructure.preference_repository import SqlAlchemyPreferenceRepository  # noqa: E402
+from app.infrastructure.telemetry import configure_telemetry, traced_subprocess_span  # noqa: E402
+
+configure_telemetry(service_name="atlas-mcp-memory")
 
 mcp = FastMCP("memory")
 
@@ -40,8 +43,9 @@ async def remember_preference(key: str, value: str) -> str:
     """Remember a durable user preference or fact that should influence
     behavior in this AND future conversations — not just this message.
     Use a short snake_case key, e.g. key="reply_style", value="concise"."""
-    await _set_preference(_user_oid(), key, value)
-    return f"Remembered: {key} = {value}"
+    with traced_subprocess_span("atlas-mcp-memory", "remember_preference"):
+        await _set_preference(_user_oid(), key, value)
+        return f"Remembered: {key} = {value}"
 
 
 if __name__ == "__main__":

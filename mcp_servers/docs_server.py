@@ -27,6 +27,9 @@ from mcp.server.fastmcp import FastMCP  # noqa: E402
 from openai import AsyncAzureOpenAI  # noqa: E402
 
 from app.infrastructure.config import settings  # noqa: E402
+from app.infrastructure.telemetry import configure_telemetry, traced_subprocess_span  # noqa: E402
+
+configure_telemetry(service_name="atlas-mcp-docs")
 
 mcp = FastMCP("docs")
 
@@ -83,25 +86,28 @@ async def search_documents(query: str, top: int = 5) -> str:
     query. Returns matching chunks along with the filename each one came
     from, so you can cite sources. If nothing matches, say so plainly
     instead of guessing."""
-    query_vector = await _embed_query(query)
+    with traced_subprocess_span("atlas-mcp-docs", "search_documents"):
+        query_vector = await _embed_query(query)
 
-    search_client = _build_search_client()
-    try:
-        vector_query = VectorizedQuery(vector=query_vector, k_nearest_neighbors=top, fields="content_vector")
-        results = await search_client.search(
-            search_text=None,
-            vector_queries=[vector_query],
-            filter=f"user_oid eq '{_user_oid()}'",
-            select=["filename", "chunk_text"],
-            top=top,
-        )
-        matches = [{"filename": r["filename"], "chunk_text": r["chunk_text"]} async for r in results]
-    finally:
-        await search_client.close()
+        search_client = _build_search_client()
+        try:
+            vector_query = VectorizedQuery(vector=query_vector, k_nearest_neighbors=top, fields="content_vector")
+            results = await search_client.search(
+                search_text=None,
+                vector_queries=[vector_query],
+                filter=f"user_oid eq '{_user_oid()}'",
+                select=["filename", "chunk_text"],
+                top=top,
+            )
+            matches = [{"filename": r["filename"], "chunk_text": r["chunk_text"]} async for r in results]
+        finally:
+            await search_client.close()
 
-    if not matches:
-        return json.dumps({"matches": [], "note": "No matching content found in the user's uploaded documents."})
-    return json.dumps({"matches": matches})
+        if not matches:
+            return json.dumps(
+                {"matches": [], "note": "No matching content found in the user's uploaded documents."}
+            )
+        return json.dumps({"matches": matches})
 
 
 if __name__ == "__main__":

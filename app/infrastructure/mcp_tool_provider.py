@@ -7,6 +7,7 @@ from mcp.client.stdio import stdio_client
 
 from app.domain.entities import ToolCallRequest
 from app.infrastructure.mcp_registry import MCP_SERVER_REGISTRY, McpServerConfig
+from app.infrastructure.telemetry import inject_trace_context
 
 
 class UnknownToolError(Exception):
@@ -36,6 +37,13 @@ class McpToolProvider:
         self, server: McpServerConfig, context: dict[str, str]
     ) -> AsyncIterator[ClientSession]:
         env = {key: context[key] for key in server.env_keys if key in context}
+        # Every server gets the current trace context, regardless of
+        # env_keys — this is what makes a chat turn's tool call show up as
+        # one connected distributed trace in Application Insights instead
+        # of an orphaned span in the subprocess.
+        trace_context = inject_trace_context()
+        if "traceparent" in trace_context:
+            env["TRACEPARENT"] = trace_context["traceparent"]
         params = StdioServerParameters(command=server.command, args=server.args, env=env or None)
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:

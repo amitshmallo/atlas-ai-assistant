@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     azure_document_intelligence_endpoint: str = ""
     azure_document_intelligence_api_key: str = ""
 
+    # Application Insights — leave unset locally to disable telemetry
+    # entirely; the app and every MCP server subprocess check this before
+    # doing anything OpenTelemetry-related.
+    applicationinsights_connection_string: str = ""
+
     @property
     def entra_authority(self) -> str:
         return f"https://login.microsoftonline.com/{self.entra_tenant_id}"

@@ -70,6 +70,16 @@ module keyVault 'modules/key-vault.bicep' = {
   }
 }
 
+module network 'modules/network.bicep' = {
+  name: 'network'
+  scope: resourceGroup
+  params: {
+    name: 'vnet-${resourceToken}'
+    location: location
+    tags: tags
+  }
+}
+
 module aiFoundry 'modules/ai-foundry.bicep' = {
   name: 'ai-foundry'
   scope: resourceGroup
@@ -130,6 +140,7 @@ module containerAppsEnvironment 'modules/container-apps-environment.bicep' = {
     location: location
     tags: tags
     logAnalyticsWorkspaceId: logAnalytics.outputs.workspaceId
+    infrastructureSubnetId: network.outputs.infraSubnetId
   }
 }
 
@@ -140,6 +151,21 @@ module deployerKeyVaultAccess 'modules/key-vault-rbac.bicep' = {
     keyVaultName: keyVault.outputs.name
     principalId: principalId
   }
+}
+
+module appInsights 'modules/app-insights.bicep' = {
+  name: 'app-insights'
+  scope: resourceGroup
+  params: {
+    name: 'appi-${resourceToken}'
+    location: location
+    tags: tags
+    logAnalyticsWorkspaceId: logAnalytics.outputs.workspaceId
+    keyVaultName: keyVault.outputs.name
+  }
+  dependsOn: [
+    deployerKeyVaultAccess
+  ]
 }
 
 // Depends on deployerKeyVaultAccess (implicitly, via keyVaultName + the fact
@@ -158,6 +184,51 @@ module redis 'modules/redis.bicep' = {
   dependsOn: [
     deployerKeyVaultAccess
   ]
+}
+
+module postgresPrivateEndpoint 'modules/private-endpoint.bicep' = {
+  name: 'postgres-private-endpoint'
+  scope: resourceGroup
+  params: {
+    name: 'pe-psql-${resourceToken}'
+    location: location
+    tags: tags
+    vnetId: network.outputs.vnetId
+    subnetId: network.outputs.privateEndpointSubnetId
+    privateLinkServiceId: postgres.outputs.id
+    groupId: 'postgresqlServer'
+    privateDnsZoneName: 'privatelink.postgres.database.azure.com'
+  }
+}
+
+module searchPrivateEndpoint 'modules/private-endpoint.bicep' = {
+  name: 'search-private-endpoint'
+  scope: resourceGroup
+  params: {
+    name: 'pe-srch-${resourceToken}'
+    location: location
+    tags: tags
+    vnetId: network.outputs.vnetId
+    subnetId: network.outputs.privateEndpointSubnetId
+    privateLinkServiceId: aiSearch.outputs.id
+    groupId: 'searchService'
+    privateDnsZoneName: 'privatelink.search.windows.net'
+  }
+}
+
+module aiFoundryPrivateEndpoint 'modules/private-endpoint.bicep' = {
+  name: 'ai-foundry-private-endpoint'
+  scope: resourceGroup
+  params: {
+    name: 'pe-aif-${resourceToken}'
+    location: location
+    tags: tags
+    vnetId: network.outputs.vnetId
+    subnetId: network.outputs.privateEndpointSubnetId
+    privateLinkServiceId: aiFoundry.outputs.id
+    groupId: 'account'
+    privateDnsZoneName: 'privatelink.cognitiveservices.azure.com'
+  }
 }
 
 module apiSecrets 'modules/key-vault-secrets.bicep' = {
@@ -198,6 +269,7 @@ module api 'modules/container-app-api.bicep' = {
   dependsOn: [
     apiSecrets
     redis
+    appInsights
   ]
 }
 
@@ -219,7 +291,12 @@ module documentProcessorFunction 'modules/function-app.bicep' = {
     aiFoundryAccountName: aiFoundry.outputs.name
     documentIntelligenceAccountName: documentIntelligence.outputs.name
     searchServiceName: aiSearch.outputs.name
+    keyVaultName: keyVault.outputs.name
+    functionIntegrationSubnetId: network.outputs.functionIntegrationSubnetId
   }
+  dependsOn: [
+    appInsights
+  ]
 }
 
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = containerRegistry.outputs.loginServer

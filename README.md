@@ -9,6 +9,7 @@ Phase 6: Email/calendar tools — Graph-backed OpenAI tool calling.
 Phase 7: MCP integration — tools extracted into standalone MCP servers.
 Phase 8: RAG & document processing — blob upload, async OCR/embed/index pipeline, document search tool.
 Phase 9: Long-term memory — durable preferences, auto-loaded every turn.
+Phase 10: Monitoring & secure networking — distributed tracing, VNet + private endpoints.
 
 See the full PRD/phased plan at `.claude/plans/project-atlas-calm-ember.md` (or wherever it was saved).
 
@@ -238,6 +239,58 @@ proves the auto-load happens with zero tool calls involved,
 to prove the upsert (`ON CONFLICT ... DO UPDATE`) actually works, and
 live-tested end to end — stated a preference in one conversation, started
 a brand-new one, confirmed it still applied.
+
+### Monitoring & secure networking (Phase 10)
+
+**Distributed tracing.** `app/infrastructure/telemetry.py` is the shared
+module both the FastAPI app and every MCP server subprocess call. It's
+entirely opt-in: with `APPLICATIONINSIGHTS_CONNECTION_STRING` unset (the
+local default), every function in it is a no-op — nothing about normal
+operation depends on Application Insights being reachable.
+
+The interesting part is making one chat turn's tool call show up as *one
+connected trace* instead of disconnected fragments. When `McpToolProvider`
+spawns an MCP server subprocess, it injects the current W3C `traceparent`
+as an env var (`app/infrastructure/mcp_tool_provider.py`); each MCP server
+extracts it and starts its tool-call span as a child of that context
+(`traced_subprocess_span` in `telemetry.py`). The result: API span → MCP
+subprocess span → the outbound Graph/Azure OpenAI HTTP call the subprocess
+makes (via `HTTPXClientInstrumentor`, since neither the `openai` SDK nor
+Graph's httpx-based calls get traced automatically) all land in Application
+Insights under the same trace ID. Azure Functions gets its own Application
+Insights integration for free from the platform (`host.json` already has
+the config) — no code changes needed there, just the connection string.
+
+**VNet + private endpoints.** `infra/modules/network.bicep` creates a VNet
+with three subnets: one delegated to Container Apps (the API's VNet
+integration), one for private endpoints, and one delegated to
+`Microsoft.Web/serverFarms` for the Function's *outbound* VNet integration.
+`infra/modules/private-endpoint.bicep` is a generic module reused for
+Postgres, Azure AI Search, and Azure AI Foundry — each gets
+`publicNetworkAccess: 'Disabled'` and is reachable only via private link
+from inside the VNet.
+
+**Storage is deliberately left public** — a real constraint, not an
+oversight: Azure Functions' blob-trigger polling mechanism on a
+Consumption plan requires the storage account to stay publicly reachable;
+making it private would require upgrading to a Premium/Dedicated plan,
+a cost tradeoff this project doesn't take. **Azure AI Search moves from
+Free to Basic tier** for the same kind of reason — Free (shared,
+multi-tenant) doesn't support any VNet features at all, so private
+endpoint support requires Basic (~$75/mo) once you actually deploy this
+via `azd up`; the manual portal setup for local testing still uses Free,
+since that path never touches the VNet.
+
+The Container Apps environment's `vnetConfiguration.internal` stays at its
+default (`false`/unset) — VNet integration here is only about the API
+being able to *reach* private data services, not about hiding the API
+itself, which needs to stay internet-reachable for anyone to log in.
+
+This phase's code compiles cleanly (`az bicep build`, zero warnings) but,
+like the rest of the Azure deployment story, has never actually been run
+via `azd up` — VNet integration and private DNS resolution are the most
+likely things in this whole project to need live debugging when that
+finally happens, more so than anything in Phases 3-9.
 
 ## Tests
 

@@ -8,10 +8,12 @@ from app.api.routers.health import router as health_router
 from app.api.routers.me import router as me_router
 from app.infrastructure.config import settings
 from app.infrastructure.logging import configure_logging
+from app.infrastructure.telemetry import configure_telemetry
 
 
 def create_app() -> FastAPI:
     configure_logging()
+    configure_telemetry(service_name="atlas-api")
 
     app = FastAPI(title="Atlas API")
     app.add_middleware(

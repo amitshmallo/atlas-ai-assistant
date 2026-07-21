@@ -29,6 +29,12 @@ resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' = {
     highAvailability: {
       mode: 'Disabled'
     }
+    // Phase 10: no public network access and no firewall rules at all —
+    // reachable only via the private endpoint main.bicep sets up on the
+    // VNet's private-endpoints subnet.
+    network: {
+      publicNetworkAccess: 'Disabled'
+    }
   }
 }
 
@@ -37,16 +43,6 @@ resource database 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2024-08-0
   name: 'atlas'
 }
 
-// Dev-friendly: allow Azure services (Container Apps outbound IPs) to connect.
-// Tightened to a private endpoint in Phase 10 (secure networking).
-resource allowAzureServices 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2024-08-01' = {
-  parent: postgres
-  name: 'AllowAzureServices'
-  properties: {
-    startIpAddress: '0.0.0.0'
-    endIpAddress: '0.0.0.0'
-  }
-}
-
 output fqdn string = postgres.properties.fullyQualifiedDomainName
 output name string = postgres.name
+output id string = postgres.id

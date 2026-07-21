@@ -82,6 +82,11 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           keyVaultUrl: '${keyVault.properties.vaultUri}secrets/redis-url'
           identity: 'system'
         }
+        {
+          name: 'appinsights-connection-string'
+          keyVaultUrl: '${keyVault.properties.vaultUri}secrets/appinsights-connection-string'
+          identity: 'system'
+        }
       ]
     }
     template: {
@@ -106,6 +111,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'AZURE_STORAGE_ACCOUNT_URL', value: azureStorageAccountUrl }
             { name: 'AZURE_SEARCH_ENDPOINT', value: azureSearchEndpoint }
             { name: 'AZURE_SEARCH_INDEX_NAME', value: azureSearchIndexName }
+            { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', secretRef: 'appinsights-connection-string' }
           ]
         }
       ]

@@ -12,14 +12,21 @@ param documentIntelligenceEndpoint string
 param aiFoundryAccountName string
 param documentIntelligenceAccountName string
 param searchServiceName string
+param keyVaultName string
+param functionIntegrationSubnetId string
 
 var storageBlobDataContributorRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
 var searchIndexDataContributorRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '8ebe5a00-799e-43f5-93ac-243d3dce84a7')
 var cognitiveServicesUserRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a97b65f3-24c7-4388-baec-2e87135dc908')
 var cognitiveServicesOpenAiUserRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')
+var keyVaultSecretsUserRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
   name: storageAccountName
+}
+
+resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
+  name: keyVaultName
 }
 
 resource searchService 'Microsoft.Search/searchServices@2024-06-01-preview' existing = {
@@ -59,7 +66,14 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
   properties: {
     serverFarmId: plan.id
     httpsOnly: true
+    virtualNetworkSubnetId: functionIntegrationSubnetId
     siteConfig: {
+      // Outbound calls (reaching private Postgres/Search/AI Foundry) route
+      // through functionIntegrationSubnetId regardless of this; keeping
+      // route-all off means only traffic to the VNet's address space goes
+      // through it, so calls to public endpoints (Document Intelligence,
+      // Azure OpenAI's own storage, etc.) don't take an unnecessary detour.
+      vnetRouteAllEnabled: false
       linuxFxVersion: 'Python|3.12'
       appSettings: [
         {
@@ -79,6 +93,16 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         { name: 'AZURE_SEARCH_ENDPOINT', value: azureSearchEndpoint }
         { name: 'AZURE_SEARCH_INDEX_NAME', value: azureSearchIndexName }
         { name: 'AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT', value: documentIntelligenceEndpoint }
+        {
+          // Turns on Azure Functions' built-in Application Insights
+          // integration (host.json already has the logging config for it)
+          // — no code changes needed in function_app.py for this. Resolved
+          // by the platform at runtime via the role assignment below, not
+          // at ARM deployment time — same known first-deploy race as the
+          // API Container App's Key Vault secrets (see container-app-api.bicep).
+          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+          value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/appinsights-connection-string/)'
+        }
       ]
     }
   }
@@ -123,6 +147,16 @@ resource openAiRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-0
   scope: aiFoundryAccount
   properties: {
     roleDefinitionId: cognitiveServicesOpenAiUserRoleId
+    principalId: functionApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource keyVaultSecretsUserAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(keyVault.id, functionApp.id, keyVaultSecretsUserRoleId)
+  scope: keyVault
+  properties: {
+    roleDefinitionId: keyVaultSecretsUserRoleId
     principalId: functionApp.identity.principalId
     principalType: 'ServicePrincipal'
   }
