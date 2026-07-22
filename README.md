@@ -332,10 +332,40 @@ is scoped to a single resource group (`rg-atlas-dev`), not the whole
 subscription — least-privilege, and easy to verify blast radius by reading
 the one `az role assignment create` call in this history.
 
-Not yet verified: an actual passing `deploy` job. The very first `azd up`
-for this project happens inside this pipeline rather than a terminal —
-expect (per the pattern of literally every phase before this) some live
-debugging via the Actions log once it runs for real.
+The first real `azd up` for this project ran inside this pipeline rather
+than a terminal, and — true to the pattern of every phase before this —
+surfaced a string of environment-specific issues no amount of local
+`bicep build` would have caught, none of which were bugs in the sense of
+"wrong code" so much as this exact subscription's real constraints:
+
+- **Cross-region compute quota.** This subscription has zero
+  `Microsoft.Web/serverfarms` VM quota anywhere (confirmed in two
+  different regions), so the document-processor Function's classic
+  Dynamic/Basic plans were rejected outright. Fixed by moving it to
+  Azure Functions **Flex Consumption** (a separate quota pool immune to
+  this) in a different region, with its own VNet **peered** back to the
+  main one — Postgres/AI Search/AI Foundry stay private-endpoint-only
+  throughout; the Function just reaches them over the peering instead of
+  losing that isolation.
+- **A retired Azure service.** Classic Azure Cache for Redis
+  (`Microsoft.Cache/redis`) is retired for new deployments; migrated to
+  Azure Managed Redis (`Microsoft.Cache/redisEnterprise`).
+- **A stuck provider registration.** `Microsoft.App` sat in `Registering`
+  state on this subscription rather than `Registered` — invisible from
+  Bicep, only found by directly querying `az provider show`.
+- **A slow-converging control plane.** Even after all of the above, the
+  Container App's own revision reliably starts and serves traffic
+  (verified directly with `curl` against its FQDN) faster than this
+  subscription's ARM control plane reports the resource as
+  `Succeeded` — `azd up`'s wait times out on the first attempt every
+  time. The `deploy` job retries up to three times for this reason; each
+  retry is a fast incremental update against already-provisioned infra,
+  not a full re-provision.
+
+None of this is code-path-specific — a healthier subscription would
+likely sail through on the first `azd up`. It's included here because
+diagnosing "is this my bug or my environment's quota" was most of the
+actual work.
 
 ## Tests
 

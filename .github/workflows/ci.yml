@@ -105,4 +105,18 @@ jobs:
           azd env set AI_FOUNDRY_MODEL_VERSION "${{ secrets.AI_FOUNDRY_MODEL_VERSION }}"
 
       - name: Deploy (azd up — provisions infra + deploys the API image)
-        run: azd up --no-prompt
+        # The API Container App's revision reliably starts and serves traffic
+        # (verified manually) but this subscription's Microsoft.App control
+        # plane is slow enough converging its provisioningState that azd's
+        # own wait times out on the first attempt — retrying re-runs a fast
+        # incremental update against already-provisioned infra.
+        run: |
+          for attempt in 1 2 3; do
+            echo "azd up attempt $attempt"
+            if azd up --no-prompt; then
+              exit 0
+            fi
+            echo "azd up attempt $attempt failed"
+            sleep 30
+          done
+          exit 1
