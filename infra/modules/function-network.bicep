@@ -13,14 +13,18 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-01-01' = {
     }
     subnets: [
       {
+        // Flex Consumption's VNet integration is built on the same
+        // underlying infra as Container Apps — it requires this delegation,
+        // not Microsoft.Web/serverFarms (which is what classic Dynamic/
+        // Basic plans need).
         name: 'function-integration'
         properties: {
           addressPrefix: '10.1.0.0/24'
           delegations: [
             {
-              name: 'Microsoft.Web.serverFarms'
+              name: 'Microsoft.App.environments'
               properties: {
-                serviceName: 'Microsoft.Web/serverFarms'
+                serviceName: 'Microsoft.App/environments'
               }
             }
           ]
