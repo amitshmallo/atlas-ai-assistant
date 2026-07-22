@@ -99,6 +99,17 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             memory: '1Gi'
           }
           env: [
+            {
+              // The placeholder image used on first deploy (see apiImage's
+              // description above) listens on whatever port this env var
+              // says, defaulting to 80 — but ingress here is fixed at 8000,
+              // so without this the placeholder's revision never becomes
+              // ready and provisioning times out. Unused by the real app
+              // once azd/CI replaces this image (uvicorn's port is fixed via
+              // the Dockerfile CMD, not this env var).
+              name: 'PORT'
+              value: '8000'
+            }
             { name: 'ENVIRONMENT', value: 'production' }
             { name: 'DATABASE_URL', secretRef: 'database-url' }
             { name: 'REDIS_URL', secretRef: 'redis-url' }
