@@ -8,6 +8,9 @@ param privateLinkServiceId string
 param groupId string
 param privateDnsZoneName string
 
+@description('A second VNet to link this private DNS zone to, so a resource in a peered VNet (e.g. the document-processor Function in its own region) can also resolve this private endpoint. Leave empty to skip.')
+param secondaryVnetId string = ''
+
 resource privateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
   name: privateDnsZoneName
   location: 'global'
@@ -22,6 +25,18 @@ resource vnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06
     registrationEnabled: false
     virtualNetwork: {
       id: vnetId
+    }
+  }
+}
+
+resource secondaryVnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = if (!empty(secondaryVnetId)) {
+  parent: privateDnsZone
+  name: '${uniqueString(secondaryVnetId)}-link'
+  location: 'global'
+  properties: {
+    registrationEnabled: false
+    virtualNetwork: {
+      id: secondaryVnetId
     }
   }
 }

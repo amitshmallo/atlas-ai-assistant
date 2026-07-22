@@ -31,7 +31,9 @@ resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' = {
     }
     // Phase 10: no public network access and no firewall rules at all —
     // reachable only via the private endpoint main.bicep sets up on the
-    // VNet's private-endpoints subnet.
+    // VNet's private-endpoints subnet (the document-processor Function
+    // reaches this too, over VNet peering from its own region's VNet —
+    // see functionAppLocation/function-network.bicep in main.bicep).
     network: {
       publicNetworkAccess: 'Disabled'
     }

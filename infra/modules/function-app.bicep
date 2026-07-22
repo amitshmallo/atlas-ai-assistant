@@ -71,11 +71,12 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
     httpsOnly: true
     virtualNetworkSubnetId: functionIntegrationSubnetId
     siteConfig: {
-      // Outbound calls (reaching private Postgres/Search/AI Foundry) route
-      // through functionIntegrationSubnetId regardless of this; keeping
-      // route-all off means only traffic to the VNet's address space goes
-      // through it, so calls to public endpoints (Document Intelligence,
-      // Azure OpenAI's own storage, etc.) don't take an unnecessary detour.
+      // Outbound calls (reaching private Postgres/Search/AI Foundry over
+      // VNet peering) route through functionIntegrationSubnetId regardless
+      // of this; keeping route-all off means only traffic to the peered
+      // VNets' address spaces goes through it, so calls to public endpoints
+      // (Document Intelligence, Azure OpenAI's own storage, etc.) don't
+      // take an unnecessary detour.
       vnetRouteAllEnabled: false
       linuxFxVersion: 'Python|3.12'
       appSettings: [

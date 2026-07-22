@@ -20,7 +20,7 @@ resource redisDatabase 'Microsoft.Cache/redisEnterprise/databases@2024-09-01-pre
   parent: redis
   name: 'default'
   properties: {
-    clusteringPolicy: 'NoCluster'
+    clusteringPolicy: 'EnterpriseCluster'
     evictionPolicy: 'NoEviction'
     port: 10000
   }

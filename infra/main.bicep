@@ -32,6 +32,9 @@ param principalType string = 'User'
 @description('Exact model version string for the gpt-5-mini deployment — check the AI Foundry portal or `az cognitiveservices account list-models` for the current value before deploying, since model versions get retired/replaced over time')
 param aiFoundryModelVersion string
 
+@description('Region for the document-processor Function App specifically — this subscription has no Microsoft.Web/serverfarms compute quota in the primary `location` region, so the Function (and its plan) live here instead, in their own VNet peered back to the main one so Postgres/AI Search/AI Foundry stay reachable only via private endpoint.')
+param functionAppLocation string = 'germanywestcentral'
+
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
 var tags = {
   'azd-env-name': environmentName
@@ -81,6 +84,27 @@ module network 'modules/network.bicep' = {
     name: 'vnet-${resourceToken}'
     location: location
     tags: tags
+  }
+}
+
+module functionNetwork 'modules/function-network.bicep' = {
+  name: 'function-network'
+  scope: resourceGroup
+  params: {
+    name: 'vnet-func-${resourceToken}'
+    location: functionAppLocation
+    tags: tags
+  }
+}
+
+module vnetPeering 'modules/vnet-peering.bicep' = {
+  name: 'vnet-peering'
+  scope: resourceGroup
+  params: {
+    mainVnetName: network.outputs.vnetName
+    mainVnetId: network.outputs.vnetId
+    functionVnetName: functionNetwork.outputs.vnetName
+    functionVnetId: functionNetwork.outputs.vnetId
   }
 }
 
@@ -203,7 +227,11 @@ module postgresPrivateEndpoint 'modules/private-endpoint.bicep' = {
     privateLinkServiceId: postgres.outputs.id
     groupId: 'postgresqlServer'
     privateDnsZoneName: 'privatelink.postgres.database.azure.com'
+    secondaryVnetId: functionNetwork.outputs.vnetId
   }
+  dependsOn: [
+    vnetPeering
+  ]
 }
 
 module searchPrivateEndpoint 'modules/private-endpoint.bicep' = {
@@ -218,7 +246,11 @@ module searchPrivateEndpoint 'modules/private-endpoint.bicep' = {
     privateLinkServiceId: aiSearch.outputs.id
     groupId: 'searchService'
     privateDnsZoneName: 'privatelink.search.windows.net'
+    secondaryVnetId: functionNetwork.outputs.vnetId
   }
+  dependsOn: [
+    vnetPeering
+  ]
 }
 
 module aiFoundryPrivateEndpoint 'modules/private-endpoint.bicep' = {
@@ -233,7 +265,11 @@ module aiFoundryPrivateEndpoint 'modules/private-endpoint.bicep' = {
     privateLinkServiceId: aiFoundry.outputs.id
     groupId: 'account'
     privateDnsZoneName: 'privatelink.cognitiveservices.azure.com'
+    secondaryVnetId: functionNetwork.outputs.vnetId
   }
+  dependsOn: [
+    vnetPeering
+  ]
 }
 
 module apiSecrets 'modules/key-vault-secrets.bicep' = {
@@ -283,7 +319,7 @@ module documentProcessorFunction 'modules/function-app.bicep' = {
   scope: resourceGroup
   params: {
     name: 'func-docs-${resourceToken}'
-    location: location
+    location: functionAppLocation
     tags: tags
     storageAccountName: storageAccount.outputs.name
     databaseUrl: databaseUrl
@@ -297,10 +333,13 @@ module documentProcessorFunction 'modules/function-app.bicep' = {
     documentIntelligenceAccountName: documentIntelligence.outputs.name
     searchServiceName: aiSearch.outputs.name
     keyVaultName: keyVault.outputs.name
-    functionIntegrationSubnetId: network.outputs.functionIntegrationSubnetId
+    functionIntegrationSubnetId: functionNetwork.outputs.functionIntegrationSubnetId
   }
   dependsOn: [
     appInsights
+    postgresPrivateEndpoint
+    searchPrivateEndpoint
+    aiFoundryPrivateEndpoint
   ]
 }
 

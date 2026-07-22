@@ -27,9 +27,8 @@ resource account 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
   properties: {
     customSubDomainName: name
     // Reachable only via private endpoint (Container App is VNet-integrated;
-    // the Function is VNet-integrated for outbound calls specifically so it
-    // can still reach this even though its own storage account stays public
-    // — see network.bicep's function-integration subnet comment).
+    // the document-processor Function reaches this over VNet peering from
+    // its own region's VNet — see functionAppLocation in main.bicep).
     publicNetworkAccess: 'Disabled'
   }
 }

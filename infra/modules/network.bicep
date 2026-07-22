@@ -36,31 +36,11 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-01-01' = {
           privateEndpointNetworkPolicies: 'Disabled'
         }
       }
-      {
-        // Regional VNet integration for the Function App's *outbound*
-        // calls (reaching private Postgres/Search/AI Foundry) — separate
-        // from and unrelated to the blob-trigger polling limitation that's
-        // why Storage itself stays public (see storage-account.bicep).
-        // Needs its own subnet, delegated differently from the Container
-        // Apps one, and must be empty (no other resources in it).
-        name: 'function-integration'
-        properties: {
-          addressPrefix: '10.0.3.0/24'
-          delegations: [
-            {
-              name: 'Microsoft.Web.serverFarms'
-              properties: {
-                serviceName: 'Microsoft.Web/serverFarms'
-              }
-            }
-          ]
-        }
-      }
     ]
   }
 }
 
 output vnetId string = vnet.id
+output vnetName string = vnet.name
 output infraSubnetId string = vnet.properties.subnets[0].id
 output privateEndpointSubnetId string = vnet.properties.subnets[1].id
-output functionIntegrationSubnetId string = vnet.properties.subnets[2].id
