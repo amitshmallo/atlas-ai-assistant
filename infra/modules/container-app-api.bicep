@@ -45,12 +45,83 @@ resource searchService 'Microsoft.Search/searchServices@2024-06-01-preview' exis
   name: searchServiceName
 }
 
+// A user-assigned identity, not system-assigned: its principalId exists the
+// moment it's created, independent of the Container App. That breaks what
+// was a genuine deadlock with a system-assigned identity — the Container
+// App eagerly tries to pull its image using its identity's ACR credentials
+// as part of its own PUT completing, but that identity's principalId (and
+// therefore the AcrPull role assignment) couldn't exist until the Container
+// App's PUT had already completed. Confirmed via `az containerapp logs show
+// --type system`: "ACR token exchange endpoint returned error status: 401",
+// repeating for over an hour with the revision never starting.
+resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: '${name}-identity'
+  location: location
+  tags: tags
+}
+
+resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(containerRegistry.id, identity.id, acrPullRoleId)
+  scope: containerRegistry
+  properties: {
+    roleDefinitionId: acrPullRoleId
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource keyVaultSecretsUserAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(keyVault.id, identity.id, keyVaultSecretsUserRoleId)
+  scope: keyVault
+  properties: {
+    roleDefinitionId: keyVaultSecretsUserRoleId
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource cognitiveServicesOpenAiUserAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(aiFoundryAccount.id, identity.id, cognitiveServicesOpenAiUserRoleId)
+  scope: aiFoundryAccount
+  properties: {
+    roleDefinitionId: cognitiveServicesOpenAiUserRoleId
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Storage: the API itself uploads documents. Search: not the API directly,
+// but mcp_servers/docs_server.py runs as its subprocess and inherits this
+// same managed identity via DefaultAzureCredential.
+resource storageBlobDataContributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storageAccount.id, identity.id, storageBlobDataContributorRoleId)
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: storageBlobDataContributorRoleId
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource searchIndexDataReaderAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(searchService.id, identity.id, searchIndexDataReaderRoleId)
+  scope: searchService
+  properties: {
+    roleDefinitionId: searchIndexDataReaderRoleId
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: name
   location: location
   tags: tags
   identity: {
-    type: 'SystemAssigned'
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${identity.id}': {}
+    }
   }
   properties: {
     managedEnvironmentId: containerAppsEnvironmentId
@@ -63,29 +134,29 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       registries: [
         {
           server: containerRegistryLoginServer
-          identity: 'system'
+          identity: identity.id
         }
       ]
       secrets: [
         {
           name: 'database-url'
           keyVaultUrl: '${keyVault.properties.vaultUri}secrets/database-url'
-          identity: 'system'
+          identity: identity.id
         }
         {
           name: 'entra-api-client-secret'
           keyVaultUrl: '${keyVault.properties.vaultUri}secrets/entra-api-client-secret'
-          identity: 'system'
+          identity: identity.id
         }
         {
           name: 'redis-url'
           keyVaultUrl: '${keyVault.properties.vaultUri}secrets/redis-url'
-          identity: 'system'
+          identity: identity.id
         }
         {
           name: 'appinsights-connection-string'
           keyVaultUrl: '${keyVault.properties.vaultUri}secrets/appinsights-connection-string'
-          identity: 'system'
+          identity: identity.id
         }
       ]
     }
@@ -132,66 +203,15 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       }
     }
   }
-}
-
-// Known Azure race: on the very first deploy, the Container App's system
-// identity doesn't have Key Vault/ACR access yet when this resource's own
-// PUT tries to resolve secretRefs/registry auth. If the first `azd up`
-// fails on secret resolution, re-run `azd deploy` — the role assignments
-// below will already exist and the retry succeeds.
-resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(containerRegistry.id, containerApp.id, acrPullRoleId)
-  scope: containerRegistry
-  properties: {
-    roleDefinitionId: acrPullRoleId
-    principalId: containerApp.identity.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-resource keyVaultSecretsUserAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVault.id, containerApp.id, keyVaultSecretsUserRoleId)
-  scope: keyVault
-  properties: {
-    roleDefinitionId: keyVaultSecretsUserRoleId
-    principalId: containerApp.identity.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-resource cognitiveServicesOpenAiUserAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(aiFoundryAccount.id, containerApp.id, cognitiveServicesOpenAiUserRoleId)
-  scope: aiFoundryAccount
-  properties: {
-    roleDefinitionId: cognitiveServicesOpenAiUserRoleId
-    principalId: containerApp.identity.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-// Storage: the API itself uploads documents. Search: not the API directly,
-// but mcp_servers/docs_server.py runs as its subprocess and inherits this
-// same managed identity via DefaultAzureCredential.
-resource storageBlobDataContributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(storageAccount.id, containerApp.id, storageBlobDataContributorRoleId)
-  scope: storageAccount
-  properties: {
-    roleDefinitionId: storageBlobDataContributorRoleId
-    principalId: containerApp.identity.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-resource searchIndexDataReaderAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(searchService.id, containerApp.id, searchIndexDataReaderRoleId)
-  scope: searchService
-  properties: {
-    roleDefinitionId: searchIndexDataReaderRoleId
-    principalId: containerApp.identity.principalId
-    principalType: 'ServicePrincipal'
-  }
+  dependsOn: [
+    acrPullAssignment
+    keyVaultSecretsUserAssignment
+    cognitiveServicesOpenAiUserAssignment
+    storageBlobDataContributorAssignment
+    searchIndexDataReaderAssignment
+  ]
 }
 
 output uri string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
 output name string = containerApp.name
-output principalId string = containerApp.identity.principalId
+output principalId string = identity.properties.principalId
