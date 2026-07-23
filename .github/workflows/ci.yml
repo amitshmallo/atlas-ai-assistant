@@ -105,19 +105,26 @@ jobs:
           azd env set ENTRA_SPA_CLIENT_ID "${{ secrets.ENTRA_SPA_CLIENT_ID }}"
           azd env set AI_FOUNDRY_MODEL_VERSION "${{ secrets.AI_FOUNDRY_MODEL_VERSION }}"
 
-      - name: Deploy (azd up — provisions infra + deploys the API image)
-        # The API Container App's revision reliably starts and serves traffic
-        # (verified manually) but this subscription's Microsoft.App control
-        # plane is slow enough converging its provisioningState that azd's
-        # own wait times out on the first attempt — retrying re-runs a fast
-        # incremental update against already-provisioned infra.
+      - name: Provision infrastructure
+        # Deliberately split from packaging/deploy (not `azd up`, which
+        # overlaps the two for speed): the frontend's Docker build needs
+        # SERVICE_API_URI as a build arg, which only exists once the API
+        # Container App has actually been provisioned. `azd up`'s overlap
+        # would build the frontend image before that output exists on every
+        # single run (this is a fresh `azd env new` each time, so there's no
+        # prior run's state to fall back on either) — confirmed by the
+        # deployed frontend calling its own origin for /chat instead of the
+        # API, because the empty build arg won.
         run: |
           for attempt in 1 2 3; do
-            echo "azd up attempt $attempt"
-            if azd up --no-prompt; then
+            echo "azd provision attempt $attempt"
+            if azd provision --no-prompt; then
               exit 0
             fi
-            echo "azd up attempt $attempt failed"
+            echo "azd provision attempt $attempt failed"
             sleep 30
           done
           exit 1
+
+      - name: Deploy application code
+        run: azd deploy --no-prompt
