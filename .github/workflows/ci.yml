@@ -102,6 +102,7 @@ jobs:
           azd env set ENTRA_TENANT_ID "${{ secrets.ENTRA_TENANT_ID }}"
           azd env set ENTRA_API_CLIENT_ID "${{ secrets.ENTRA_API_CLIENT_ID }}"
           azd env set ENTRA_API_CLIENT_SECRET "${{ secrets.ENTRA_API_CLIENT_SECRET }}"
+          azd env set ENTRA_SPA_CLIENT_ID "${{ secrets.ENTRA_SPA_CLIENT_ID }}"
           azd env set AI_FOUNDRY_MODEL_VERSION "${{ secrets.AI_FOUNDRY_MODEL_VERSION }}"
 
       - name: Deploy (azd up — provisions infra + deploys the API image)

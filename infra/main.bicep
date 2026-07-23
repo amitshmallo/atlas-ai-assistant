@@ -40,6 +40,13 @@ var tags = {
   'azd-env-name': environmentName
 }
 var databaseUrl = 'postgresql+asyncpg://atlasadmin:${postgresAdminPassword}@${postgres.outputs.fqdn}:5432/atlas'
+// Computed rather than read from the frontend module's own output — the API
+// and frontend Container Apps would otherwise depend on each other's URIs
+// (API needs the frontend's origin for CORS, frontend needs the API's URI
+// as a build arg), and Container App FQDNs are deterministic from the
+// environment's default domain, so there's no need for an actual circular
+// reference.
+var frontendUrl = 'https://ca-web-${resourceToken}.${containerAppsEnvironment.outputs.defaultDomain}'
 
 resource resourceGroup 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   name: 'rg-${environmentName}'
@@ -306,12 +313,25 @@ module api 'modules/container-app-api.bicep' = {
     azureSearchEndpoint: aiSearch.outputs.endpoint
     azureSearchIndexName: 'documents'
     searchServiceName: aiSearch.outputs.name
+    frontendUrl: frontendUrl
   }
   dependsOn: [
     apiSecrets
     redis
     appInsights
   ]
+}
+
+module frontend 'modules/container-app-frontend.bicep' = {
+  name: 'frontend'
+  scope: resourceGroup
+  params: {
+    name: 'ca-web-${resourceToken}'
+    location: location
+    tags: union(tags, { 'azd-service-name': 'frontend' })
+    containerAppsEnvironmentId: containerAppsEnvironment.outputs.environmentId
+    containerRegistryLoginServer: containerRegistry.outputs.loginServer
+  }
 }
 
 module documentProcessorFunction 'modules/function-app.bicep' = {
@@ -347,6 +367,7 @@ output AZURE_CONTAINER_REGISTRY_ENDPOINT string = containerRegistry.outputs.logi
 output AZURE_KEY_VAULT_NAME string = keyVault.outputs.name
 output AZURE_KEY_VAULT_ENDPOINT string = keyVault.outputs.endpoint
 output SERVICE_API_URI string = api.outputs.uri
+output SERVICE_FRONTEND_URI string = frontend.outputs.uri
 output AZURE_RESOURCE_GROUP string = resourceGroup.name
 output DOCUMENT_PROCESSOR_FUNCTION_NAME string = documentProcessorFunction.outputs.name
 output AZURE_SEARCH_ENDPOINT string = aiSearch.outputs.endpoint

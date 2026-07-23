@@ -15,6 +15,7 @@ param azureStorageAccountUrl string
 param azureSearchEndpoint string
 param azureSearchIndexName string
 param searchServiceName string
+param frontendUrl string
 
 @description('Placeholder image used on first deploy; azd/CI replaces this with the built image on subsequent deploys.')
 param apiImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
@@ -182,6 +183,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               value: '8000'
             }
             { name: 'ENVIRONMENT', value: 'production' }
+            { name: 'ALLOWED_ORIGINS', value: '["${frontendUrl}"]' }
             { name: 'DATABASE_URL', secretRef: 'database-url' }
             { name: 'REDIS_URL', secretRef: 'redis-url' }
             { name: 'ENTRA_TENANT_ID', value: entraTenantId }

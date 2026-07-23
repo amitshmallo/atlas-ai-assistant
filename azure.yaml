@@ -10,3 +10,20 @@ services:
     host: containerapp
     docker:
       path: Dockerfile
+
+  frontend:
+    project: ./frontend
+    language: js
+    host: containerapp
+    docker:
+      path: Dockerfile
+      # SERVICE_API_URI only exists as an azd env value after the first
+      # successful provision — on a brand-new environment's very first
+      # `azd up`, packaging overlaps with provisioning and this is empty,
+      # so the frontend falls back to its localhost default (see
+      # authConfig.ts) until the next `azd up`/`azd deploy` picks it up.
+      buildArgs:
+        - VITE_ENTRA_TENANT_ID=${ENTRA_TENANT_ID}
+        - VITE_ENTRA_SPA_CLIENT_ID=${ENTRA_SPA_CLIENT_ID}
+        - VITE_API_CLIENT_ID=${ENTRA_API_CLIENT_ID}
+        - VITE_API_BASE_URL=${SERVICE_API_URI}
