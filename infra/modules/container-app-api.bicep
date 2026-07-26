@@ -182,6 +182,17 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'PORT'
               value: '8000'
             }
+            {
+              // DefaultAzureCredential (used for Azure OpenAI/Storage/Search
+              // calls via managed identity — see azure_openai_api_key's
+              // description in config.py) defaults to looking for a
+              // system-assigned identity. This is a user-assigned one (see
+              // the identity resource's comment above), so it needs its
+              // client ID explicitly — DefaultAzureCredential picks this up
+              // from the environment automatically, no code changes needed.
+              name: 'AZURE_CLIENT_ID'
+              value: identity.properties.clientId
+            }
             { name: 'ENVIRONMENT', value: 'production' }
             { name: 'ALLOWED_ORIGINS', value: '["${frontendUrl}"]' }
             { name: 'DATABASE_URL', secretRef: 'database-url' }
