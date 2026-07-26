@@ -206,4 +206,5 @@ resource keyVaultSecretsUserAssignment 'Microsoft.Authorization/roleAssignments@
 }
 
 output name string = functionApp.name
+output id string = functionApp.id
 output principalId string = functionApp.identity.principalId

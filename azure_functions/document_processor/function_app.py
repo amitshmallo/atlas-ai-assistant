@@ -174,7 +174,20 @@ async def _update_status(document_id: str, status: str, error_message: str | Non
         await session.commit()
 
 
-@app.blob_trigger(arg_name="blob", path="documents/{name}", connection="AzureWebJobsStorage")
+@app.blob_trigger(
+    arg_name="blob",
+    path="documents/{name}",
+    connection="AzureWebJobsStorage",
+    # Flex Consumption only supports Event Grid as the blob trigger source —
+    # confirmed via the host's own startup log: "The Flex Consumption SKU
+    # only supports EventGrid as the source for BlobTrigger functions." The
+    # classic polling-based source silently loaded 0 job functions instead
+    # of erroring, so uploads sat in "processing" with nothing ever
+    # listening. Requires an Event Grid subscription routing
+    # Microsoft.Storage.BlobCreated events here — see
+    # infra/modules/event-grid-blob-trigger.bicep.
+    source="EventGrid",
+)
 async def process_uploaded_document(blob: func.InputStream) -> None:
     # blob.name from the runtime is "documents/{user_oid}/{document_id}-{filename}".
     blob_path = blob.name.split("/", 1)[1]
