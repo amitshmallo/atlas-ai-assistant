@@ -16,7 +16,13 @@ from pathlib import Path
 
 import azure.functions as func
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+_module_dir = Path(__file__).resolve().parent
+# azd's function packaging only zips this directory, not the whole repo, so
+# the prepackage hook in azure.yaml copies app/ in alongside this file for
+# deployment — that layout is tried first. The second entry is the repo
+# root, for running this locally against the full checkout unmodified.
+sys.path.insert(0, str(_module_dir))
+sys.path.insert(0, str(_module_dir.parent.parent))
 
 from chunking import chunk_text, parse_blob_path  # noqa: E402
 

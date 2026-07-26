@@ -16,3 +16,4 @@ frontend/dist/
 local.settings.json
 azure_functions/*/bin/
 azure_functions/*/obj/
+azure_functions/*/app/

@@ -340,7 +340,7 @@ module documentProcessorFunction 'modules/function-app.bicep' = {
   params: {
     name: 'func-docs-${resourceToken}'
     location: functionAppLocation
-    tags: tags
+    tags: union(tags, { 'azd-service-name': 'document-processor' })
     storageAccountName: storageAccount.outputs.name
     databaseUrl: databaseUrl
     azureOpenAiEndpoint: aiFoundry.outputs.endpoint

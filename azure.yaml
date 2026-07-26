@@ -27,3 +27,20 @@ services:
         - VITE_ENTRA_SPA_CLIENT_ID=${ENTRA_SPA_CLIENT_ID}
         - VITE_API_CLIENT_ID=${ENTRA_API_CLIENT_ID}
         - VITE_API_BASE_URL=${SERVICE_API_URI}
+
+  document-processor:
+    project: ./azure_functions/document_processor
+    language: python
+    host: function
+    hooks:
+      # azd only zips this service's own project directory — the Function
+      # imports shared code from the app/ package at the repo root (see
+      # function_app.py's sys.path comment), so it has to be copied in
+      # before packaging, not referenced in place.
+      prepackage:
+        windows:
+          shell: pwsh
+          run: Remove-Item -Recurse -Force -ErrorAction SilentlyContinue ./app; Copy-Item -Recurse ../../app ./app
+        posix:
+          shell: sh
+          run: rm -rf ./app && cp -r ../../app ./app
