@@ -203,6 +203,16 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'AZURE_OPENAI_ENDPOINT', value: azureOpenAiEndpoint }
             { name: 'AZURE_OPENAI_DEPLOYMENT', value: azureOpenAiDeployment }
             { name: 'AZURE_OPENAI_EMBEDDING_DEPLOYMENT', value: azureOpenAiEmbeddingDeployment }
+            {
+              // config.py defaults this to the Azurite emulator's
+              // well-known connection string for local-dev convenience, and
+              // the blob client prefers it over AZURE_STORAGE_ACCOUNT_URL
+              // whenever it's non-empty — so it has to be explicitly
+              // cleared here, or the app tries to reach 127.0.0.1:10000
+              // instead of the real storage account.
+              name: 'AZURE_STORAGE_CONNECTION_STRING'
+              value: ''
+            }
             { name: 'AZURE_STORAGE_ACCOUNT_URL', value: azureStorageAccountUrl }
             { name: 'AZURE_SEARCH_ENDPOINT', value: azureSearchEndpoint }
             { name: 'AZURE_SEARCH_INDEX_NAME', value: azureSearchIndexName }
