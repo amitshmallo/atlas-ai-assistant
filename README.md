@@ -11,8 +11,62 @@ Phase 8: RAG & document processing — blob upload, async OCR/embed/index pipeli
 Phase 9: Long-term memory — durable preferences, auto-loaded every turn.
 Phase 10: Monitoring & secure networking — distributed tracing, VNet + private endpoints.
 Phase 11: CI/CD — GitHub Actions (lint, test, build) + OIDC deploy via azd, both API and frontend Container Apps, confirmed live end-to-end.
+Phase 12: Production hardening — rate limiting, retry/backoff on external calls, structured error handling, cost/token guardrails.
 
 See the full PRD/phased plan at `.claude/plans/project-atlas-calm-ember.md` (or wherever it was saved).
+
+## Architecture
+
+```mermaid
+flowchart TB
+    User["Browser"] -->|MSAL.js login| Frontend["React SPA\n(Container App)"]
+    Frontend -->|JWT bearer| API["FastAPI API\n(Container App)"]
+
+    API -->|On-Behalf-Of| Graph["Microsoft Graph\n(mail, calendar)"]
+    API -->|tool calling| Foundry["Azure OpenAI\n(AI Foundry)"]
+    API <-->|history, prefs| Postgres[("Postgres")]
+    API <-->|cache| Redis[("Redis")]
+    API -->|stdio subprocess| MCP["MCP servers\n(graph / docs / memory / notes)"]
+    MCP --> Graph
+    MCP --> Search
+    MCP --> Postgres
+
+    Upload["Document upload"] --> API
+    API -->|blob write| Storage[("Blob Storage")]
+    Storage -->|Event Grid trigger| Function["Document-processor\nFunction (Flex Consumption)"]
+    Function --> DocIntel["Document Intelligence\n(OCR)"]
+    Function --> Foundry
+    Function -->|index| Search[("Azure AI Search")]
+    Function --> Postgres
+```
+
+Every arrow above is a real, live-verified call path — nothing here is
+aspirational. A few decisions worth calling out for anyone reading this
+as a portfolio piece rather than just cloning it:
+
+- **Stateless API, externalized everything.** No session affinity
+  anywhere; any Container App replica can handle any request because
+  conversation history, preferences, and document metadata all live in
+  Postgres, and short-lived state (Redis-cached tokens, rate-limit
+  counters) is keyed per-user/per-client, not per-instance.
+- **MCP over direct integration.** The orchestrator (`app/application/
+  chat.py`) only knows a generic `ToolProvider` interface — it has no
+  idea Graph, Azure AI Search, or Postgres preferences are involved.
+  Each tool is a standalone subprocess speaking MCP over stdio,
+  registered in one place (`app/infrastructure/mcp_registry.py`). Adding
+  a tool never touches the orchestrator; `mcp_servers/notes_server.py`
+  exists purely as proof of that.
+- **Two independently-scaled compute paths for one pipeline.** The
+  request/response half (chat, uploads accepted) runs on Container Apps;
+  the slow half (OCR, embedding, indexing) runs on a separate,
+  independently-scaled Azure Function triggered by the blob write, not
+  blocking the user's upload request.
+- **Everything private that can be, with one documented, deliberate
+  exception.** Postgres, AI Search, and AI Foundry are private-endpoint-
+  only; the Function reaches them over a peered VNet (in a different
+  region, since this subscription had zero compute quota for it in the
+  primary region) rather than punching a public hole in any of them —
+  see the CI/CD section below for exactly how that was verified.
 
 ## Layout
 
@@ -423,6 +477,44 @@ tokens) turned up.
 All of the above is now confirmed working live: upload → blob trigger →
 OCR (Document Intelligence) → chunking → embedding → indexing, and
 `search_documents` correctly retrieving and citing chunks in chat.
+
+### Production hardening (Phase 12)
+
+- **Rate limiting** (`app/infrastructure/rate_limiter.py`) on `/chat` and
+  `/documents`, backed by Redis so the limit is shared across every
+  stateless API replica rather than reset per-instance. Keyed by client
+  IP, not user OID — `slowapi`'s key function is synchronous and only
+  sees the raw request, while validating the bearer JWT (JWKS fetch +
+  cache) is async and already happens in the route's own auth dependency;
+  re-deriving identity in a sync context would duplicate that work. FastAPI
+  resolves dependencies (including auth) before calling a decorated route's
+  body, so this caps repeated calls from *authenticated* clients — the
+  actual cost-control target — rather than anonymous request floods,
+  which are a separate, infra-level concern.
+- **Retry with exponential backoff** (`app/infrastructure/resilience.py`,
+  via `tenacity`) on transient Graph/Azure OpenAI failures (429s, 5xx,
+  connection errors) — but only where retrying is actually safe.
+  `create_draft_reply` (two sequential Graph writes) and `create_event`
+  (a single write Graph gives no idempotency key for) are deliberately
+  left unretried: a lost response after the write already succeeded
+  server-side would retry into a duplicate draft, or a duplicate calendar
+  invite sent to real attendees. Streaming completions get a narrower
+  version of this too — a retry decorator can't meaningfully wrap a
+  generator function (calling it just returns a generator object without
+  running anything), so only the call that opens the stream is retried,
+  not the token-by-token iteration afterward.
+- **Structured error responses** (`app/api/error_handlers.py`) — a
+  catch-all handler on the base `Exception` type guarantees every route
+  returns JSON instead of a raw traceback for genuine bugs, without
+  leaking internals to the client (the exception still gets logged, and
+  propagates to Application Insights). It explicitly re-delegates
+  `HTTPException` to FastAPI's own handler first, so the 401s/404s
+  already raised throughout the routers keep their real status codes
+  instead of being swallowed into a generic 500.
+- **Cost/token guardrails**: a `max_tokens` cap on both chat completion
+  paths (`app/infrastructure/chat_client.py`) bounds the model's own
+  reply length, on top of the existing `_RECENT_HISTORY_LIMIT` in
+  `app/application/chat.py` that already bounded input by message count.
 
 ## Tests
 
