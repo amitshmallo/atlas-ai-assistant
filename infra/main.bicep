@@ -363,6 +363,17 @@ module documentProcessorFunction 'modules/function-app.bicep' = {
   ]
 }
 
+module documentUploadEventGrid 'modules/event-grid-blob-trigger.bicep' = {
+  name: 'document-upload-event-grid'
+  scope: resourceGroup
+  params: {
+    storageAccountId: storageAccount.outputs.id
+    functionAppName: documentProcessorFunction.outputs.name
+    location: location
+    tags: tags
+  }
+}
+
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = containerRegistry.outputs.loginServer
 output AZURE_KEY_VAULT_NAME string = keyVault.outputs.name
 output AZURE_KEY_VAULT_ENDPOINT string = keyVault.outputs.endpoint
