@@ -23,6 +23,16 @@ resource searchService 'Microsoft.Search/searchServices@2024-06-01-preview' = {
     replicaCount: 1
     partitionCount: 1
     publicNetworkAccess: 'disabled'
+    // Without this, the service only accepts API-key auth — RBAC role
+    // assignments (Search Service Contributor / Search Index Data
+    // Contributor, granted to the API's and Function's managed identities)
+    // are silently ignored and every AAD-token request gets a 403
+    // regardless of role, which is exactly what was happening here.
+    authOptions: {
+      aadOrApiKey: {
+        aadAuthFailureMode: 'http403'
+      }
+    }
   }
 }
 
