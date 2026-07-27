@@ -10,7 +10,7 @@ Phase 7: MCP integration — tools extracted into standalone MCP servers.
 Phase 8: RAG & document processing — blob upload, async OCR/embed/index pipeline, document search tool.
 Phase 9: Long-term memory — durable preferences, auto-loaded every turn.
 Phase 10: Monitoring & secure networking — distributed tracing, VNet + private endpoints.
-Phase 11: CI/CD — GitHub Actions (lint, test, build) + OIDC deploy via azd.
+Phase 11: CI/CD — GitHub Actions (lint, test, build) + OIDC deploy via azd, both API and frontend Container Apps, confirmed live end-to-end.
 
 See the full PRD/phased plan at `.claude/plans/project-atlas-calm-ember.md` (or wherever it was saved).
 
@@ -362,10 +362,67 @@ surfaced a string of environment-specific issues no amount of local
   retry is a fast incremental update against already-provisioned infra,
   not a full re-provision.
 
-None of this is code-path-specific — a healthier subscription would
+None of the above is code-path-specific — a healthier subscription would
 likely sail through on the first `azd up`. It's included here because
 diagnosing "is this my bug or my environment's quota" was most of the
 actual work.
+
+**The frontend deploys as a second Container App**, not Azure Static Web
+Apps — SWA only publishes to a small fixed set of regions, none of which
+are in this subscription's allowed-region policy, and everything about
+this subscription's regional support had already proven unreliable by
+that point. It shares the API's Container Apps environment, built via a
+multi-stage Dockerfile (`frontend/Dockerfile`) that bakes `VITE_*` env
+vars in as Docker build args, since a static SPA bundle has no runtime
+env var equivalent. `azd up`'s single-pass packaging-overlaps-provisioning
+optimization broke this in a way worth recording: the frontend's build
+needs `SERVICE_API_URI` (the API's own freshly-provisioned URL) as a
+build arg, but that output doesn't exist until `provision` finishes —
+and since CI starts a brand-new `azd env` every run, there's never a
+prior run's value to fall back on either. The workflow now runs `azd
+provision` to completion first, then `azd deploy`, instead of a single
+`azd up`.
+
+**The document-processor Function needed its own service wiring and a
+real trigger fix, not just infra.** It was never declared as an `azd`
+service at all — only `api` and `frontend` were — so its infrastructure
+provisioned fine but no pipeline ever deployed its actual code, and
+every upload sat in "processing" forever with nothing listening. Fixing
+that (a `host: function` entry with a `prepackage` hook copying the
+shared `app/` package alongside it, since `azd` only zips a service's
+own directory) surfaced the real bug underneath: Flex Consumption
+doesn't support the classic polling-based blob trigger at all — it
+silently loaded zero job functions instead of erroring — and needs
+`source="EventGrid"` plus a manually-wired Event Grid subscription
+pointed at the function host's own blob-extension webhook (not the
+`AzureFunction` destination type, which explicitly rejects non-
+`eventGridTrigger` functions). Getting the trigger to fire also needed a
+`Storage Queue Data Contributor` role the blob listener uses internally
+for dedup tracking, invisible from the trigger's own code.
+
+**End-to-end RAG retrieval surfaced a real application bug, not an
+infra one.** Once documents indexed successfully, `search_documents`
+still failed — traced to `McpToolProvider._session` in
+`app/infrastructure/mcp_tool_provider.py` building each MCP subprocess's
+environment from scratch (`env={...only its declared keys...}`), which
+*replaces* a spawned process's environment rather than extending it, per
+normal `subprocess` semantics. Every server with `env_keys` (everything
+except `notes`) was invisibly cut off from `AZURE_CLIENT_ID`, endpoint
+URLs, and everything else the parent process has, with no error at
+spawn time — it just meant `DefaultAzureCredential` inside the
+subprocess had no idea which managed identity to use. Fixed by starting
+from `os.environ` and layering the declared keys on top.
+
+One more real bug, not infra: Azure AI Search had no `authOptions` set
+at all, which defaults the service to API-key-only — every AAD-token
+request got a 403 regardless of how correct the RBAC role assignments
+were, which cost real time chasing role/scope theories before the
+actual cause (the service simply wasn't configured to accept AAD
+tokens) turned up.
+
+All of the above is now confirmed working live: upload → blob trigger →
+OCR (Document Intelligence) → chunking → embedding → indexing, and
+`search_documents` correctly retrieving and citing chunks in chat.
 
 ## Tests
 
