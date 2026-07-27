@@ -1,3 +1,4 @@
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -36,7 +37,12 @@ class McpToolProvider:
     async def _session(
         self, server: McpServerConfig, context: dict[str, str]
     ) -> AsyncIterator[ClientSession]:
-        env = {key: context[key] for key in server.env_keys if key in context}
+        # Starts from the parent's own environment — passing a partial dict
+        # to subprocess (which StdioServerParameters wraps) *replaces* the
+        # child's environment rather than extending it, which left every
+        # server with env_keys unable to see AZURE_CLIENT_ID, endpoints, or
+        # anything else it needs beyond its declared keys.
+        env = {**os.environ, **{key: context[key] for key in server.env_keys if key in context}}
         # Every server gets the current trace context, regardless of
         # env_keys — this is what makes a chat turn's tool call show up as
         # one connected distributed trace in Application Insights instead
@@ -44,7 +50,7 @@ class McpToolProvider:
         trace_context = inject_trace_context()
         if "traceparent" in trace_context:
             env["TRACEPARENT"] = trace_context["traceparent"]
-        params = StdioServerParameters(command=server.command, args=server.args, env=env or None)
+        params = StdioServerParameters(command=server.command, args=server.args, env=env)
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
