@@ -7,6 +7,7 @@ from openai import AsyncAzureOpenAI
 
 from app.domain.entities import ChatCompletionResult, ChatMessage, ToolCallRequest
 from app.infrastructure.config import settings
+from app.infrastructure.resilience import retry_openai_call
 
 _COGNITIVE_SERVICES_SCOPE = "https://cognitiveservices.azure.com/.default"
 
@@ -56,12 +57,22 @@ class AzureOpenAIChatClient:
     def __init__(self) -> None:
         self._client = _build_client()
 
-    async def stream_completion(self, messages: list[ChatMessage]) -> AsyncIterator[str]:
-        stream = await self._client.chat.completions.create(
+    @retry_openai_call
+    async def _create_stream(self, messages: list[ChatMessage]):
+        return await self._client.chat.completions.create(
             model=settings.azure_openai_deployment,
             messages=[_to_openai_message(m) for m in messages],
+            max_tokens=settings.azure_openai_max_tokens,
             stream=True,
         )
+
+    async def stream_completion(self, messages: list[ChatMessage]) -> AsyncIterator[str]:
+        # Only the call that opens the stream is retried, not the iteration
+        # below — a retry decorator on a generator function doesn't work as
+        # you'd expect: calling it returns a generator object immediately
+        # without running any code, so it can't catch failures that happen
+        # partway through consuming a stream, only ones from starting it.
+        stream = await self._create_stream(messages)
         async for event in stream:
             if not event.choices:
                 continue
@@ -69,6 +80,7 @@ class AzureOpenAIChatClient:
             if delta and delta.content:
                 yield delta.content
 
+    @retry_openai_call
     async def complete_with_tools(
         self, messages: list[ChatMessage], tools: list[dict[str, Any]]
     ) -> ChatCompletionResult:
@@ -77,6 +89,7 @@ class AzureOpenAIChatClient:
             messages=[_to_openai_message(m) for m in messages],
             tools=tools,
             tool_choice="auto",
+            max_tokens=settings.azure_openai_max_tokens,
         )
         message = response.choices[0].message
 

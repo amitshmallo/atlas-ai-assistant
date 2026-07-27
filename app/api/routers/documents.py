@@ -1,18 +1,21 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, UploadFile
+from fastapi import APIRouter, Depends, Request, UploadFile
 
 from app.api.auth_deps import get_current_user
 from app.api.deps import get_document_repository, get_upload_document_use_case
 from app.application.upload_document import UploadDocumentUseCase
 from app.domain.entities import AuthenticatedUser, DocumentMetadata
 from app.infrastructure.document_repository import SqlAlchemyDocumentRepository
+from app.infrastructure.rate_limiter import limiter
 
 router = APIRouter(tags=["documents"])
 
 
 @router.post("/documents", response_model=DocumentMetadata)
+@limiter.limit("10/minute")
 async def upload_document(
+    request: Request,
     file: UploadFile,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     use_case: Annotated[UploadDocumentUseCase, Depends(get_upload_document_use_case)],

@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -9,6 +9,7 @@ from app.api.deps import get_conversation_repository, get_send_chat_message_use_
 from app.application.chat import ConversationNotFoundError, SendChatMessageUseCase
 from app.domain.entities import AuthenticatedUser, ChatMessage
 from app.infrastructure.conversation_repository import SqlAlchemyConversationRepository
+from app.infrastructure.rate_limiter import limiter
 
 router = APIRouter(tags=["chat"])
 
@@ -19,16 +20,18 @@ class ChatRequest(BaseModel):
 
 
 @router.post("/chat")
+@limiter.limit("10/minute")
 async def post_chat(
-    request: ChatRequest,
+    request: Request,
+    chat_request: ChatRequest,
     auth_context: Annotated[AuthContext, Depends(get_auth_context)],
     use_case: Annotated[SendChatMessageUseCase, Depends(get_send_chat_message_use_case)],
 ) -> StreamingResponse:
     try:
         conversation_id, stream = await use_case.execute(
             user_oid=auth_context.user.oid,
-            conversation_id=request.conversation_id,
-            user_message=request.message,
+            conversation_id=chat_request.conversation_id,
+            user_message=chat_request.message,
             user_assertion=auth_context.raw_token,
         )
     except ConversationNotFoundError as exc:

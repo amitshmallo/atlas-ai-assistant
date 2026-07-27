@@ -1,6 +1,7 @@
 import httpx
 
 from app.domain.entities import EmailDraft, EmailMessage, EmailSummary
+from app.infrastructure.resilience import retry_graph_call
 
 _GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
@@ -13,6 +14,7 @@ class HttpxGraphMailClient:
     """Concrete implementation of domain.GraphMailClient backed by direct
     calls to Microsoft Graph."""
 
+    @retry_graph_call
     async def list_recent_emails(
         self, access_token: str, top: int, unread_only: bool
     ) -> list[EmailSummary]:
@@ -35,6 +37,7 @@ class HttpxGraphMailClient:
 
         return [self._to_summary(item) for item in data.get("value", [])]
 
+    @retry_graph_call
     async def get_email(self, access_token: str, message_id: str) -> EmailMessage:
         async with httpx.AsyncClient() as client:
             response = await client.get(
@@ -52,6 +55,10 @@ class HttpxGraphMailClient:
             body=data.get("body", {}).get("content", ""),
         )
 
+    # Deliberately not retried: this is two sequential writes (create then
+    # patch), and retrying the whole method after a transient failure on
+    # the second call would re-run the first one too, creating a duplicate
+    # draft — unlike the read-only calls above, this isn't idempotent.
     async def create_draft_reply(self, access_token: str, message_id: str, body: str) -> EmailDraft:
         async with httpx.AsyncClient() as client:
             create_response = await client.post(

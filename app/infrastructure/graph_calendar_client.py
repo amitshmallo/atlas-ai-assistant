@@ -10,6 +10,12 @@ class HttpxGraphCalendarClient:
     invoked by the explicit calendar-confirmation endpoint (app/api/routers
     /calendar.py) — never reachable from a model tool call directly."""
 
+    # Deliberately not retried: a lost response after the write actually
+    # succeeds server-side would retry into a duplicate event, sending a
+    # second invite to every attendee. Graph doesn't support a client-
+    # supplied idempotency key here, so a safe retry isn't possible without
+    # a bigger change (e.g. checking for an existing event with the same
+    # proposal details first).
     async def create_event(self, access_token: str, proposal: CalendarEventProposal) -> CalendarEvent:
         body = {
             "subject": proposal.subject,

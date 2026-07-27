@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     # identity is used instead (see infra/modules/container-app-api.bicep).
     azure_openai_api_key: str = ""
     azure_openai_embedding_deployment: str = "text-embedding-3-small"
+    # Cost guardrail: caps the model's own reply length per turn. Doesn't
+    # bound input tokens (that's what _RECENT_HISTORY_LIMIT in
+    # app/application/chat.py is for), just the runaway-output case.
+    azure_openai_max_tokens: int = 2000
 
     # Blob storage — defaults to the well-known Azurite emulator connection
     # string for local dev. In Azure, leave the connection string unset and
