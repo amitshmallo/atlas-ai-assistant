@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.chat import SendChatMessageUseCase
 from app.application.create_calendar_event import CreateCalendarEventUseCase
+from app.application.delete_document import DeleteDocumentUseCase
 from app.application.graph_profile import GetMyProfileUseCase
 from app.application.health import GetHealthStatusUseCase
 from app.application.upload_document import UploadDocumentUseCase
@@ -21,6 +22,7 @@ from app.infrastructure.mcp_tool_provider import McpToolProvider
 from app.infrastructure.obo_token_provider import MsalOboTokenProvider
 from app.infrastructure.preference_repository import SqlAlchemyPreferenceRepository
 from app.infrastructure.redis_client import redis_client
+from app.infrastructure.search_index_client import AzureSearchDocumentIndex
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
@@ -80,3 +82,10 @@ def get_upload_document_use_case(session: SessionDep) -> UploadDocumentUseCase:
     document_repository = SqlAlchemyDocumentRepository(session)
     blob_storage_client = AzureBlobStorageClient()
     return UploadDocumentUseCase(document_repository, blob_storage_client)
+
+
+def get_delete_document_use_case(session: SessionDep) -> DeleteDocumentUseCase:
+    document_repository = SqlAlchemyDocumentRepository(session)
+    blob_storage_client = AzureBlobStorageClient()
+    document_search_index = AzureSearchDocumentIndex()
+    return DeleteDocumentUseCase(document_repository, blob_storage_client, document_search_index)

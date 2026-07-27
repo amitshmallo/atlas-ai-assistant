@@ -123,30 +123,57 @@
   margin-top: 0.6rem;
 }
 
-/* ---------- Profile debug ---------- */
-
-.profile-json {
-  font-family: var(--mono);
-  font-size: 0.8rem;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.75rem;
-  overflow-x: auto;
-  margin-top: 0.75rem;
-}
-
 /* ---------- Documents ---------- */
 
-.documents-upload {
+.documents-dropzone {
+  position: relative;
   display: flex;
-  gap: 0.5rem;
+  flex-direction: column;
   align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  padding: 1.5rem 1rem;
+  border: 1.5px dashed var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.documents-upload input[type='file'] {
-  flex: 1;
-  font-size: 0.85rem;
+.documents-dropzone:hover {
+  border-color: var(--accent);
+}
+
+.documents-dropzone-active {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.documents-dropzone-busy {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.documents-dropzone-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.documents-dropzone-icon {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.documents-dropzone-text {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-h);
+}
+
+.documents-dropzone-hint {
+  font-size: 0.75rem;
   color: var(--text-muted);
 }
 
@@ -160,10 +187,16 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.5rem 0;
+  gap: 0.6rem;
+  padding: 0.6rem 0.25rem;
   border-top: 1px solid var(--border);
   font-size: 0.9rem;
+  border-radius: 6px;
+  transition: background 0.1s ease;
+}
+
+.documents-item:hover {
+  background: var(--bg);
 }
 
 .documents-item:first-child {
@@ -171,9 +204,35 @@
 }
 
 .documents-filename {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.documents-delete-btn {
+  appearance: none;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0.3rem 0.4rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.documents-delete-btn:hover:not(:disabled) {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.documents-delete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .status-pill {

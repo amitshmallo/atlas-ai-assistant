@@ -114,6 +114,16 @@ class BlobStorageClient(Protocol):
 
     async def upload(self, blob_path: str, content: bytes) -> None: ...
 
+    async def delete(self, blob_path: str) -> None: ...
+
+
+class DocumentSearchIndex(Protocol):
+    """Abstract boundary over the Azure AI Search index the document-
+    processor Function populates. The only write path the API itself
+    needs is deletion — indexing is the Function's job, not this one's."""
+
+    async def delete_document_chunks(self, document_id: str, user_oid: str) -> None: ...
+
 
 class DocumentRepository(Protocol):
     """Abstract boundary over document metadata storage (Postgres). The
@@ -137,6 +147,10 @@ class DocumentRepository(Protocol):
         """Returns the user_oid that owns this document, or None if it
         doesn't exist — same ownership-check pattern as ConversationRepository."""
         ...
+
+    async def get_blob_path(self, document_id: str) -> str | None: ...
+
+    async def delete_document(self, document_id: str) -> None: ...
 
 
 class PreferenceRepository(Protocol):

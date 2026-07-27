@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.entities import DocumentMetadata
@@ -40,3 +40,16 @@ class SqlAlchemyDocumentRepository:
         except ValueError:
             return None
         return result.scalar_one_or_none()
+
+    async def get_blob_path(self, document_id: str) -> str | None:
+        try:
+            result = await self._session.execute(
+                select(DocumentModel.blob_path).where(DocumentModel.id == document_id)
+            )
+        except ValueError:
+            return None
+        return result.scalar_one_or_none()
+
+    async def delete_document(self, document_id: str) -> None:
+        await self._session.execute(delete(DocumentModel).where(DocumentModel.id == document_id))
+        await self._session.commit()

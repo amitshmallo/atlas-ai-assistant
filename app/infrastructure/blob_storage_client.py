@@ -1,4 +1,4 @@
-from azure.core.exceptions import ResourceExistsError
+from azure.core.exceptions import ResourceExistsError, ResourceNotFoundError
 from azure.identity import DefaultAzureCredential
 from azure.storage.blob.aio import BlobServiceClient
 
@@ -30,3 +30,12 @@ class AzureBlobStorageClient:
         except ResourceExistsError:
             pass
         await container_client.upload_blob(name=blob_path, data=content, overwrite=True)
+
+    async def delete(self, blob_path: str) -> None:
+        container_client = self._client.get_container_client(settings.azure_storage_documents_container)
+        try:
+            await container_client.delete_blob(blob_path)
+        except ResourceNotFoundError:
+            # Already gone (or never uploaded) — deleting a document that's
+            # in an inconsistent state shouldn't get stuck on this.
+            pass

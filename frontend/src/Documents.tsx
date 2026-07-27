@@ -25,6 +25,8 @@ export function Documents({
   const [documents, setDocuments] = useState<DocumentMetadata[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const fetchDocuments = async () => {
@@ -52,9 +54,7 @@ export function Documents({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [documents])
 
-  const upload = async () => {
-    const file = fileInputRef.current?.files?.[0]
-    if (!file) return
+  const uploadFile = async (file: File) => {
     setError(null)
     setIsUploading(true)
 
@@ -79,13 +79,64 @@ export function Documents({
     }
   }
 
+  const onFilePicked = () => {
+    const file = fileInputRef.current?.files?.[0]
+    if (file) uploadFile(file)
+  }
+
+  const onDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setIsDragging(false)
+    const file = event.dataTransfer.files?.[0]
+    if (file) uploadFile(file)
+  }
+
+  const deleteDocument = async (documentId: string, filename: string) => {
+    if (!window.confirm(`Delete "${filename}"? Atlas won't be able to search it anymore.`)) return
+
+    setError(null)
+    setDeletingId(documentId)
+    try {
+      const tokenResponse = await acquireApiToken(instance, account)
+      const response = await fetch(`${apiBaseUrl}/documents/${documentId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${tokenResponse.accessToken}` },
+      })
+      if (!response.ok) throw new Error(`API returned ${response.status}`)
+      setDocuments((prev) => prev.filter((doc) => doc.id !== documentId))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   return (
     <div className="documents">
-      <div className="documents-upload">
-        <input type="file" ref={fileInputRef} disabled={isUploading} />
-        <button className="btn btn-primary" onClick={upload} disabled={isUploading}>
-          {isUploading ? 'Uploading...' : 'Upload'}
-        </button>
+      <div
+        className={`documents-dropzone${isDragging ? ' documents-dropzone-active' : ''}${isUploading ? ' documents-dropzone-busy' : ''}`}
+        onDragOver={(event) => {
+          event.preventDefault()
+          setIsDragging(true)
+        }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={onDrop}
+        onClick={() => !isUploading && fileInputRef.current?.click()}
+      >
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={onFilePicked}
+          disabled={isUploading}
+          className="documents-dropzone-input"
+        />
+        <span className="documents-dropzone-icon" aria-hidden="true">
+          {isUploading ? '⏳' : '📄'}
+        </span>
+        <p className="documents-dropzone-text">
+          {isUploading ? 'Uploading…' : 'Drop a file here, or click to browse'}
+        </p>
+        <p className="documents-dropzone-hint">PDF, JPEG, PNG, BMP, TIFF, or HEIF</p>
       </div>
 
       {documents.length === 0 ? (
@@ -94,11 +145,23 @@ export function Documents({
         <ul className="documents-list">
           {documents.map((doc) => (
             <li key={doc.id} className="documents-item">
-              <span className="documents-filename">{doc.filename}</span>
+              <span className="documents-filename" title={doc.filename}>
+                {doc.filename}
+              </span>
               <span className={`status-pill status-pill-${doc.status}`}>
                 {doc.status}
                 {doc.status === 'failed' && doc.error_message && ` · ${doc.error_message}`}
               </span>
+              <button
+                type="button"
+                className="documents-delete-btn"
+                title={`Delete ${doc.filename}`}
+                aria-label={`Delete ${doc.filename}`}
+                onClick={() => deleteDocument(doc.id, doc.filename)}
+                disabled={deletingId === doc.id}
+              >
+                {deletingId === doc.id ? '…' : '🗑'}
+              </button>
             </li>
           ))}
         </ul>

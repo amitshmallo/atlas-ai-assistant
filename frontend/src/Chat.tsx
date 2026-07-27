@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { AccountInfo, IPublicClientApplication } from '@azure/msal-browser'
 import { apiBaseUrl } from './authConfig'
 import { acquireApiToken } from './apiAuth'
@@ -64,6 +64,14 @@ export function Chat({
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [pendingProposal, setPendingProposal] = useState<CalendarEventProposal | null>(null)
   const [confirmStatus, setConfirmStatus] = useState<string | null>(null)
+  const historyEndRef = useRef<HTMLDivElement>(null)
+
+  // Fires on every message change, including in-place content updates to
+  // the last (streaming) message, so the view tracks a reply as it's
+  // still being written in, not just once it's done.
+  useEffect(() => {
+    historyEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [messages])
 
   const checkForPendingProposal = async (currentConversationId: string) => {
     const tokenResponse = await acquireApiToken(instance, account)
@@ -162,6 +170,7 @@ export function Chat({
             <span>{message.content}</span>
           </div>
         ))}
+        <div ref={historyEndRef} />
       </div>
 
       <div className="chat-input">

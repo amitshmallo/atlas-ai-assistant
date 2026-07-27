@@ -1,39 +1,14 @@
-import { useState } from 'react'
 import { AuthenticatedTemplate, UnauthenticatedTemplate, useMsal } from '@azure/msal-react'
-import { apiBaseUrl, apiLoginRequest } from './authConfig'
-import { acquireApiToken } from './apiAuth'
+import { apiLoginRequest } from './authConfig'
 import { Chat } from './Chat'
 import { Documents } from './Documents'
 import './App.css'
 
-interface Profile {
-  id: string
-  display_name: string
-  mail: string | null
-  user_principal_name: string
-}
-
 function App() {
   const { instance, accounts } = useMsal()
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   const signIn = () => instance.loginRedirect(apiLoginRequest)
   const signOut = () => instance.logoutRedirect()
-
-  const fetchMe = async () => {
-    setError(null)
-    try {
-      const tokenResponse = await acquireApiToken(instance, accounts[0])
-      const response = await fetch(`${apiBaseUrl}/me`, {
-        headers: { Authorization: `Bearer ${tokenResponse.accessToken}` },
-      })
-      if (!response.ok) throw new Error(`API returned ${response.status}`)
-      setProfile(await response.json())
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }
 
   return (
     <div className="app">
@@ -67,17 +42,6 @@ function App() {
             </button>
           </div>
         </header>
-
-        <section className="panel">
-          <div className="panel-header">
-            <h2>Account</h2>
-            <button className="btn" onClick={fetchMe}>
-              Fetch Graph profile
-            </button>
-          </div>
-          {error && <p className="error-text">{error}</p>}
-          {profile && <pre className="profile-json">{JSON.stringify(profile, null, 2)}</pre>}
-        </section>
 
         <section className="panel">
           <div className="panel-header">
