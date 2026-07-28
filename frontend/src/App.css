@@ -1,12 +1,16 @@
 .app-shell {
   display: flex;
-  align-items: flex-start;
-  min-height: 100vh;
+  /* stretch (not flex-start) so the sidebar and documents bar always match
+     the height of whichever column ends up tallest, all the way to the
+     bottom of the page — not just the viewport. */
+  align-items: stretch;
+  min-height: 100svh;
 }
 
 .app {
   flex: 1;
-  max-width: 860px;
+  min-width: 0;
+  max-width: 720px;
   margin: 0 auto;
   padding: 2rem 1.25rem 4rem;
 }
@@ -18,10 +22,24 @@
   flex-direction: column;
   flex-shrink: 0;
   width: 240px;
-  min-height: 100vh;
   padding: 1.25rem 0.75rem;
   border-right: 1px solid var(--border);
   background: var(--surface);
+}
+
+.sidebar-brand {
+  padding: 0.4rem 0.4rem 1.1rem;
+}
+
+.sidebar-brand h1 {
+  font-size: 1.4rem;
+  letter-spacing: -0.02em;
+}
+
+.sidebar-brand .tagline {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  margin-top: 0.1rem;
 }
 
 .sidebar-new-chat {
@@ -245,7 +263,20 @@
   margin-top: 0.6rem;
 }
 
-/* ---------- Documents ---------- */
+/* ---------- Documents bar ---------- */
+
+.documents-bar {
+  flex-shrink: 0;
+  width: 300px;
+  padding: 2rem 1.25rem 4rem;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  overflow-y: auto;
+}
+
+.documents-bar .panel-header {
+  margin-bottom: 0.9rem;
+}
 
 .documents-dropzone {
   position: relative;

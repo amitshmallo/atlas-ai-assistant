@@ -58,13 +58,6 @@ function App() {
         )}
 
         <div className="app">
-          <header className="app-header">
-            <div>
-              <h1>Atlas</h1>
-              <p className="tagline">Your AI executive assistant</p>
-            </div>
-          </header>
-
           {view.type === 'settings' && accounts[0] && (
             <Settings
               instance={instance}
@@ -75,33 +68,33 @@ function App() {
           )}
 
           {view.type === 'chat' && accounts[0] && (
-            <>
-              <section className="panel">
-                <div className="panel-header">
-                  <h2>Documents</h2>
-                </div>
-                <Documents instance={instance} account={accounts[0]} />
-              </section>
-
-              <section className="panel">
-                <div className="panel-header">
-                  <h2>Chat</h2>
-                </div>
-                <Chat
-                  // Remount on conversation switch so Chat's internal
-                  // state (messages, streaming, proposal) starts fresh
-                  // rather than trying to reconcile in place.
-                  key={view.conversationId ?? `new-${newChatNonce}`}
-                  instance={instance}
-                  account={accounts[0]}
-                  initialConversationId={view.conversationId}
-                  onTurnComplete={() => setUsageRefreshKey((key) => key + 1)}
-                  onConversationCreated={() => setConversationsRefreshKey((key) => key + 1)}
-                />
-              </section>
-            </>
+            <section className="panel">
+              <div className="panel-header">
+                <h2>Chat</h2>
+              </div>
+              <Chat
+                // Remount on conversation switch so Chat's internal
+                // state (messages, streaming, proposal) starts fresh
+                // rather than trying to reconcile in place.
+                key={view.conversationId ?? `new-${newChatNonce}`}
+                instance={instance}
+                account={accounts[0]}
+                initialConversationId={view.conversationId}
+                onTurnComplete={() => setUsageRefreshKey((key) => key + 1)}
+                onConversationCreated={() => setConversationsRefreshKey((key) => key + 1)}
+              />
+            </section>
           )}
         </div>
+
+        {view.type === 'chat' && accounts[0] && (
+          <aside className="documents-bar">
+            <div className="panel-header">
+              <h2>Documents</h2>
+            </div>
+            <Documents instance={instance} account={accounts[0]} />
+          </aside>
+        )}
       </AuthenticatedTemplate>
     </div>
   )

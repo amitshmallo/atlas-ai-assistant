@@ -55,6 +55,11 @@ export function Sidebar({
 
   return (
     <nav className="sidebar">
+      <div className="sidebar-brand">
+        <h1>Atlas</h1>
+        <p className="tagline">Your AI executive assistant</p>
+      </div>
+
       <button type="button" className="sidebar-new-chat" onClick={onNewChat}>
         + New chat
       </button>
