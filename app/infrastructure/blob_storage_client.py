@@ -39,3 +39,8 @@ class AzureBlobStorageClient:
             # Already gone (or never uploaded) — deleting a document that's
             # in an inconsistent state shouldn't get stuck on this.
             pass
+
+    async def download(self, blob_path: str) -> bytes:
+        container_client = self._client.get_container_client(settings.azure_storage_documents_container)
+        downloader = await container_client.download_blob(blob_path)
+        return await downloader.readall()

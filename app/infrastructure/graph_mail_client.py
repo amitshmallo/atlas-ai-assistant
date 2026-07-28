@@ -1,6 +1,8 @@
+import base64
+
 import httpx
 
-from app.domain.entities import EmailDraft, EmailMessage, EmailSummary
+from app.domain.entities import EmailDraft, EmailMessage, EmailSendProposal, EmailSummary
 from app.infrastructure.resilience import retry_graph_call
 
 _GRAPH_BASE = "https://graph.microsoft.com/v1.0"
@@ -76,6 +78,37 @@ class HttpxGraphMailClient:
             patch_response.raise_for_status()
 
         return EmailDraft(id=draft_id)
+
+    # Deliberately not retried, same reasoning as HttpxGraphCalendarClient.
+    # create_event: a lost response after Graph already sent the mail would
+    # retry into a real duplicate landing in the recipient's inbox.
+    async def send_email(
+        self,
+        access_token: str,
+        proposal: EmailSendProposal,
+        attachment_content: bytes | None,
+    ) -> None:
+        message: dict = {
+            "subject": proposal.subject,
+            "body": {"contentType": "Text", "content": proposal.body},
+            "toRecipients": [{"emailAddress": {"address": proposal.to}}],
+        }
+        if attachment_content is not None and proposal.attachment_filename:
+            message["attachments"] = [
+                {
+                    "@odata.type": "#microsoft.graph.fileAttachment",
+                    "name": proposal.attachment_filename,
+                    "contentBytes": base64.b64encode(attachment_content).decode("ascii"),
+                }
+            ]
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{_GRAPH_BASE}/me/sendMail",
+                headers=_auth_header(access_token),
+                json={"message": message, "saveToSentItems": True},
+            )
+            response.raise_for_status()
 
     @staticmethod
     def _extract_address(from_field: dict | None) -> str | None:

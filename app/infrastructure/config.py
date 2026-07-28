@@ -15,11 +15,14 @@ class Settings(BaseSettings):
     entra_tenant_id: str = ""
     entra_api_client_id: str = ""  # the API's own App ID (JWT audience)
     entra_api_client_secret: str = ""  # used for the On-Behalf-Of exchange
-    # Mail.ReadWrite (not Mail.Send) is what createReply/draft endpoints need —
-    # Atlas never sends mail, so Mail.Send is deliberately not requested.
+    # Mail.Send lets the confirmed-send-only path (app/application/
+    # send_email.py, never called directly by the model — see
+    # ATLAS_SYSTEM_PROMPT) actually send mail; Mail.ReadWrite covers
+    # everything else (list/read/draft-reply).
     graph_scopes: list[str] = [
         "https://graph.microsoft.com/User.Read",
         "https://graph.microsoft.com/Mail.ReadWrite",
+        "https://graph.microsoft.com/Mail.Send",
         "https://graph.microsoft.com/Calendars.ReadWrite",
     ]
 

@@ -80,5 +80,29 @@ async def propose_calendar_event(subject: str, start: str, end: str, attendees: 
         )
 
 
+@mcp.tool()
+async def propose_send_email(to: str, subject: str, body: str, attachment_filename: str | None = None) -> str:
+    """Propose an email to send. This does NOT send anything — it only
+    returns the proposal so you can present it and ask the user to
+    explicitly confirm before it's actually sent. `to` should be a real
+    email address: if the user only gave you a name, check whether
+    remember_preference has already stored that name's address (it would
+    show up as a contact_email_<name> preference in your context) before
+    asking the user for it. attachment_filename, if given, must be a
+    filename the user mentioned or one found via search_documents — never
+    invent one; the actual file is looked up server-side by filename, not
+    by anything you supply here."""
+    with traced_subprocess_span("atlas-mcp-graph", "propose_send_email"):
+        return json.dumps(
+            {
+                "to": to,
+                "subject": subject,
+                "body": body,
+                "attachment_filename": attachment_filename,
+                "status": "proposed — not sent; ask the user to confirm via the app",
+            }
+        )
+
+
 if __name__ == "__main__":
     mcp.run()

@@ -23,22 +23,57 @@ interface CalendarEventProposal {
   attendees: string[]
 }
 
+interface EmailSendProposal {
+  to: string
+  subject: string
+  body: string
+  attachment_filename: string | null
+}
+
+type PendingProposal =
+  | { type: 'calendar'; data: CalendarEventProposal }
+  | { type: 'email'; data: EmailSendProposal }
+
 // After a turn completes, look back through history (only within this
-// turn, i.e. after the most recent user message) for a propose_calendar_event
-// tool result — that's the model surfacing a proposal for the user to
-// review, never something it created itself.
-function findPendingProposal(history: StoredMessage[]): CalendarEventProposal | null {
+// turn, i.e. after the most recent user message) for a propose_* tool
+// result — that's the model surfacing a proposal for the user to review,
+// never something it created/sent itself. Only the most recent one (if
+// the model proposed more than one) is shown, matching how only one
+// proposal card renders at a time.
+function findPendingProposal(history: StoredMessage[]): PendingProposal | null {
   const lastUserIndex = history.map((m) => m.role).lastIndexOf('user')
   for (let i = history.length - 1; i > lastUserIndex; i--) {
     const message = history[i]
-    if (message.role === 'tool' && message.name === 'propose_calendar_event' && message.content) {
+    if (message.role !== 'tool' || !message.content) continue
+
+    if (message.name === 'propose_calendar_event') {
       try {
         const parsed = JSON.parse(message.content)
         return {
-          subject: parsed.subject,
-          start: parsed.start,
-          end: parsed.end,
-          attendees: parsed.attendees ?? [],
+          type: 'calendar',
+          data: {
+            subject: parsed.subject,
+            start: parsed.start,
+            end: parsed.end,
+            attendees: parsed.attendees ?? [],
+          },
+        }
+      } catch {
+        return null
+      }
+    }
+
+    if (message.name === 'propose_send_email') {
+      try {
+        const parsed = JSON.parse(message.content)
+        return {
+          type: 'email',
+          data: {
+            to: parsed.to,
+            subject: parsed.subject,
+            body: parsed.body,
+            attachment_filename: parsed.attachment_filename ?? null,
+          },
         }
       } catch {
         return null
@@ -62,7 +97,7 @@ export function Chat({
   // Kept in memory only — Phase 5 proves persistence lives server-side
   // (Postgres + Redis), not that the browser tab remembers it across reloads.
   const [conversationId, setConversationId] = useState<string | null>(null)
-  const [pendingProposal, setPendingProposal] = useState<CalendarEventProposal | null>(null)
+  const [pendingProposal, setPendingProposal] = useState<PendingProposal | null>(null)
   const [confirmStatus, setConfirmStatus] = useState<string | null>(null)
   const historyEndRef = useRef<HTMLDivElement>(null)
 
@@ -136,21 +171,22 @@ export function Chat({
 
   const confirmProposal = async () => {
     if (!pendingProposal) return
-    setConfirmStatus('Creating...')
+    const isEmail = pendingProposal.type === 'email'
+    setConfirmStatus(isEmail ? 'Sending...' : 'Creating...')
     try {
       const tokenResponse = await acquireApiToken(instance, account)
-      const response = await fetch(`${apiBaseUrl}/calendar/events`, {
+      const response = await fetch(`${apiBaseUrl}${isEmail ? '/email/send' : '/calendar/events'}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${tokenResponse.accessToken}`,
         },
-        body: JSON.stringify(pendingProposal),
+        body: JSON.stringify(pendingProposal.data),
       })
       if (!response.ok) {
         throw new Error(`API returned ${response.status}`)
       }
-      setConfirmStatus('Event created — check your calendar.')
+      setConfirmStatus(isEmail ? 'Email sent.' : 'Event created — check your calendar.')
       setPendingProposal(null)
     } catch (err) {
       setConfirmStatus(null)
@@ -186,17 +222,44 @@ export function Chat({
         </button>
       </div>
 
-      {pendingProposal && (
+      {pendingProposal?.type === 'calendar' && (
         <div className="chat-proposal">
           <p>
-            <strong>Proposed event:</strong> {pendingProposal.subject}
+            <strong>Proposed event:</strong> {pendingProposal.data.subject}
             <br />
-            {pendingProposal.start} → {pendingProposal.end}
-            {pendingProposal.attendees.length > 0 && <> · {pendingProposal.attendees.join(', ')}</>}
+            {pendingProposal.data.start} → {pendingProposal.data.end}
+            {pendingProposal.data.attendees.length > 0 && <> · {pendingProposal.data.attendees.join(', ')}</>}
           </p>
           <div className="chat-proposal-actions">
             <button className="btn btn-primary" onClick={confirmProposal}>
               Confirm — create in calendar
+            </button>
+            <button className="btn btn-ghost" onClick={() => setPendingProposal(null)}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {pendingProposal?.type === 'email' && (
+        <div className="chat-proposal">
+          <p>
+            <strong>Proposed email</strong>
+            <br />
+            To: {pendingProposal.data.to}
+            <br />
+            Subject: {pendingProposal.data.subject}
+            {pendingProposal.data.attachment_filename && (
+              <>
+                <br />
+                Attachment: {pendingProposal.data.attachment_filename}
+              </>
+            )}
+          </p>
+          <p className="chat-proposal-body">{pendingProposal.data.body}</p>
+          <div className="chat-proposal-actions">
+            <button className="btn btn-primary" onClick={confirmProposal}>
+              Confirm — send email
             </button>
             <button className="btn btn-ghost" onClick={() => setPendingProposal(null)}>
               Dismiss

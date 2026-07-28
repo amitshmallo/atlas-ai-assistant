@@ -75,6 +75,18 @@ async def test_propose_calendar_event_never_touches_mail_client(fake_mail_client
     assert "not created" in parsed["status"]
 
 
+async def test_propose_send_email_never_touches_mail_client(fake_mail_client):
+    result = await graph_server.propose_send_email(
+        to="a@example.com", subject="Hi", body="Hello there", attachment_filename="resume.pdf"
+    )
+
+    assert fake_mail_client.last_call is None  # no Graph call was made
+    parsed = json.loads(result)
+    assert parsed["to"] == "a@example.com"
+    assert parsed["attachment_filename"] == "resume.pdf"
+    assert "not sent" in parsed["status"]
+
+
 async def test_missing_env_token_raises(monkeypatch, fake_mail_client):
     monkeypatch.delenv("GRAPH_ACCESS_TOKEN", raising=False)
 

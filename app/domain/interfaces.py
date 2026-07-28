@@ -9,6 +9,7 @@ from app.domain.entities import (
     DocumentMetadata,
     EmailDraft,
     EmailMessage,
+    EmailSendProposal,
     EmailSummary,
     ToolCallRequest,
     UserPreference,
@@ -75,6 +76,17 @@ class GraphMailClient(Protocol):
         no tool call can trigger on its own."""
         ...
 
+    async def send_email(
+        self,
+        access_token: str,
+        proposal: EmailSendProposal,
+        attachment_content: bytes | None,
+    ) -> None:
+        """Only ever invoked by SendEmailUseCase, after the user has
+        explicitly confirmed a proposal the model surfaced via
+        propose_send_email — never directly from a tool call."""
+        ...
+
 
 class GraphCalendarClient(Protocol):
     """Abstract boundary over Microsoft Graph calendar endpoints. Only
@@ -115,6 +127,8 @@ class BlobStorageClient(Protocol):
     async def upload(self, blob_path: str, content: bytes) -> None: ...
 
     async def delete(self, blob_path: str) -> None: ...
+
+    async def download(self, blob_path: str) -> bytes: ...
 
 
 class DocumentSearchIndex(Protocol):

@@ -9,6 +9,7 @@ from app.application.create_calendar_event import CreateCalendarEventUseCase
 from app.application.delete_document import DeleteDocumentUseCase
 from app.application.graph_profile import GetMyProfileUseCase
 from app.application.health import GetHealthStatusUseCase
+from app.application.send_email import SendEmailUseCase
 from app.application.upload_document import UploadDocumentUseCase
 from app.infrastructure.blob_storage_client import AzureBlobStorageClient
 from app.infrastructure.chat_client import AzureOpenAIChatClient
@@ -17,6 +18,7 @@ from app.infrastructure.database import get_session
 from app.infrastructure.document_repository import SqlAlchemyDocumentRepository
 from app.infrastructure.graph_calendar_client import HttpxGraphCalendarClient
 from app.infrastructure.graph_client import HttpxGraphClient
+from app.infrastructure.graph_mail_client import HttpxGraphMailClient
 from app.infrastructure.health_repository import SqlAlchemyHealthCheckRepository
 from app.infrastructure.mcp_tool_provider import McpToolProvider
 from app.infrastructure.obo_token_provider import MsalOboTokenProvider
@@ -89,3 +91,11 @@ def get_delete_document_use_case(session: SessionDep) -> DeleteDocumentUseCase:
     blob_storage_client = AzureBlobStorageClient()
     document_search_index = AzureSearchDocumentIndex()
     return DeleteDocumentUseCase(document_repository, blob_storage_client, document_search_index)
+
+
+def get_send_email_use_case(session: SessionDep) -> SendEmailUseCase:
+    token_provider = MsalOboTokenProvider(redis_client)
+    mail_client = HttpxGraphMailClient()
+    document_repository = SqlAlchemyDocumentRepository(session)
+    blob_storage_client = AzureBlobStorageClient()
+    return SendEmailUseCase(token_provider, mail_client, document_repository, blob_storage_client)

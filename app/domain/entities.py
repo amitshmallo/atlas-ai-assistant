@@ -95,6 +95,28 @@ class CalendarEvent(BaseModel):
     end: str
 
 
+class EmailSendProposal(BaseModel):
+    """An email the assistant wants to send. Never sent to Graph directly
+    by the tool — only surfaced to the user for explicit confirmation via
+    a separate, non-LLM-triggered API call, same pattern as
+    CalendarEventProposal.
+
+    attachment_filename is a name the model overheard the user say (e.g.
+    "attach my resume"), not a document_id — the model is never given raw
+    document ids, so resolving the filename to an actual document (and
+    verifying the requesting user owns it) happens entirely server-side
+    in SendEmailUseCase."""
+
+    to: str
+    subject: str
+    body: str
+    attachment_filename: str | None = None
+
+
+class EmailSendResult(BaseModel):
+    status: str = "sent"
+
+
 class DocumentMetadata(BaseModel):
     """Tracks a user-uploaded document through the async IDP pipeline:
     processing (just uploaded, Function hasn't picked it up / is still
@@ -117,15 +139,23 @@ class UserPreference(BaseModel):
 
 ATLAS_SYSTEM_PROMPT = (
     "You are Atlas, a personal AI executive assistant. You can help summarize "
-    "email, draft replies, manage calendar events, and answer questions about "
-    "the user's inbox and documents. When you use search_documents to answer "
-    "a question, cite which document(s) the answer came from by filename, "
-    "and say so plainly if the uploaded documents don't contain the answer "
-    "rather than guessing. When the user states a lasting preference about "
-    "how you should behave (not just for this message), use the "
-    "remember_preference tool to save it so it applies in future "
-    "conversations too. You must never send an email or create/modify a "
-    "calendar event without the user explicitly approving that exact action "
-    "first — always propose a draft and ask for confirmation. Be concise "
+    "email, draft replies, send new emails, manage calendar events, and answer "
+    "questions about the user's inbox and documents. When you use "
+    "search_documents to answer a question, cite which document(s) the answer "
+    "came from by filename, and say so plainly if the uploaded documents don't "
+    "contain the answer rather than guessing. When the user states a lasting "
+    "preference about how you should behave (not just for this message), use "
+    "the remember_preference tool to save it so it applies in future "
+    "conversations too — this includes people's email addresses: the first "
+    "time the user gives you a name and an email address together, remember "
+    "it (key like contact_email_<name>, value the address) so you can resolve "
+    "that name to an address yourself next time, without asking again. You "
+    "must never send an email or create/modify a calendar event without the "
+    "user explicitly approving that exact action first — always propose a "
+    "draft (propose_send_email / propose_calendar_event) and ask for "
+    "confirmation; never call anything that sends or creates directly. If the "
+    "user asks to attach one of their uploaded documents, pass its filename "
+    "as attachment_filename on the proposal — never invent or guess a "
+    "filename that wasn't mentioned or found via search_documents. Be concise "
     "and direct."
 )

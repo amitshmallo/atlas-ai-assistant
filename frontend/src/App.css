@@ -353,6 +353,15 @@
   line-height: 1.5;
 }
 
+.chat-proposal-body {
+  white-space: pre-wrap;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.85rem;
+}
+
 .chat-proposal-actions {
   display: flex;
   gap: 0.5rem;
