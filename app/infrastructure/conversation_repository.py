@@ -4,10 +4,11 @@ from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.entities import ChatMessage, ToolCallRequest
+from app.domain.entities import ChatMessage, ConversationSummary, ToolCallRequest
 from app.infrastructure.conversation_models import ConversationModel, MessageModel
 
 _CACHE_TTL_SECONDS = 3600
+_TITLE_MAX_LENGTH = 60
 
 
 class SqlAlchemyConversationRepository:
@@ -51,6 +52,47 @@ class SqlAlchemyConversationRepository:
             ex=_CACHE_TTL_SECONDS,
         )
         return messages
+
+    async def list_conversations(self, user_oid: str) -> list[ConversationSummary]:
+        conversations_result = await self._session.execute(
+            select(ConversationModel)
+            .where(ConversationModel.user_oid == user_oid)
+            .order_by(ConversationModel.created_at.desc())
+        )
+        conversations = conversations_result.scalars().all()
+        if not conversations:
+            return []
+
+        conversation_ids = [c.id for c in conversations]
+        messages_result = await self._session.execute(
+            select(MessageModel)
+            .where(MessageModel.conversation_id.in_(conversation_ids))
+            .order_by(MessageModel.created_at.asc())
+        )
+        # Grouping in Python rather than a second aggregate query — the
+        # per-conversation message count here is small (bounded by how
+        # much a person chats in one session), so this is cheap and avoids
+        # a fiddly window-function query for first-user-message + last-any-
+        # message in one round trip.
+        first_user_message_by_conversation: dict = {}
+        last_message_at_by_conversation: dict = {}
+        for message in messages_result.scalars().all():
+            last_message_at_by_conversation[message.conversation_id] = message.created_at
+            if message.role == "user" and message.conversation_id not in first_user_message_by_conversation:
+                first_user_message_by_conversation[message.conversation_id] = message.content or ""
+
+        summaries = []
+        for conversation in conversations:
+            title = first_user_message_by_conversation.get(conversation.id, "New conversation")
+            if len(title) > _TITLE_MAX_LENGTH:
+                title = title[:_TITLE_MAX_LENGTH].rstrip() + "…"
+            updated_at = last_message_at_by_conversation.get(conversation.id, conversation.created_at)
+            summaries.append(
+                ConversationSummary(id=str(conversation.id), title=title, updated_at=updated_at.isoformat())
+            )
+
+        summaries.sort(key=lambda s: s.updated_at, reverse=True)
+        return summaries
 
     async def get_owner(self, conversation_id: str) -> str | None:
         try:

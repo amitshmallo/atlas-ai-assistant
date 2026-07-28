@@ -6,6 +6,7 @@ from app.domain.entities import (
     CalendarEventProposal,
     ChatCompletionResult,
     ChatMessage,
+    ConversationSummary,
     DocumentMetadata,
     EmailDraft,
     EmailMessage,
@@ -213,6 +214,10 @@ class ConversationRepository(Protocol):
 
     async def create_conversation(self, user_oid: str) -> str:
         """Returns the new conversation's id."""
+        ...
+
+    async def list_conversations(self, user_oid: str) -> list[ConversationSummary]:
+        """Most-recently-active first, for the sidebar's recent-chats list."""
         ...
 
     async def get_recent_messages(self, conversation_id: str, limit: int) -> list[ChatMessage]: ...

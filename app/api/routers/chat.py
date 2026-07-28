@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from app.api.auth_deps import AuthContext, get_auth_context, get_current_user
 from app.api.deps import get_conversation_repository, get_send_chat_message_use_case
 from app.application.chat import ConversationNotFoundError, SendChatMessageUseCase
-from app.domain.entities import AuthenticatedUser, ChatMessage
+from app.domain.entities import AuthenticatedUser, ChatMessage, ConversationSummary
 from app.infrastructure.conversation_repository import SqlAlchemyConversationRepository
 from app.infrastructure.rate_limiter import limiter
 
@@ -40,6 +40,14 @@ async def post_chat(
     response = StreamingResponse(stream, media_type="text/plain")
     response.headers["X-Conversation-Id"] = conversation_id
     return response
+
+
+@router.get("/chat/conversations", response_model=list[ConversationSummary])
+async def get_conversations(
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repository: Annotated[SqlAlchemyConversationRepository, Depends(get_conversation_repository)],
+) -> list[ConversationSummary]:
+    return await repository.list_conversations(user.oid)
 
 
 @router.get("/chat/{conversation_id}/messages", response_model=list[ChatMessage])

@@ -154,6 +154,16 @@ class UsageSummary(BaseModel):
     turn_count: int
 
 
+class ConversationSummary(BaseModel):
+    """One entry in the sidebar's recent-chats list. `title` is derived
+    from the conversation's first user message (truncated), not stored
+    separately — conversations have no user-editable name."""
+
+    id: str
+    title: str
+    updated_at: str
+
+
 class UserPreference(BaseModel):
     """A durable fact about the user, stored outside conversation history so
     it persists across brand-new conversations, not just the one it was
