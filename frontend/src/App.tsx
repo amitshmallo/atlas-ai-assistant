@@ -1,11 +1,14 @@
+import { useState } from 'react'
 import { AuthenticatedTemplate, UnauthenticatedTemplate, useMsal } from '@azure/msal-react'
 import { apiLoginRequest } from './authConfig'
 import { Chat } from './Chat'
 import { Documents } from './Documents'
+import { Usage } from './Usage'
 import './App.css'
 
 function App() {
   const { instance, accounts } = useMsal()
+  const [usageRefreshKey, setUsageRefreshKey] = useState(0)
 
   const signIn = () => instance.loginRedirect(apiLoginRequest)
   const signOut = () => instance.logoutRedirect()
@@ -54,7 +57,20 @@ function App() {
           <div className="panel-header">
             <h2>Chat</h2>
           </div>
-          {accounts[0] && <Chat instance={instance} account={accounts[0]} />}
+          {accounts[0] && (
+            <Chat
+              instance={instance}
+              account={accounts[0]}
+              onTurnComplete={() => setUsageRefreshKey((key) => key + 1)}
+            />
+          )}
+        </section>
+
+        <section className="panel">
+          <div className="panel-header">
+            <h2>Usage</h2>
+          </div>
+          {accounts[0] && <Usage instance={instance} account={accounts[0]} refreshKey={usageRefreshKey} />}
         </section>
       </AuthenticatedTemplate>
     </div>

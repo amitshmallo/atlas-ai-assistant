@@ -1,15 +1,27 @@
 from collections.abc import AsyncIterator
 
-from app.domain.entities import ATLAS_SYSTEM_PROMPT, ChatMessage
+from app.domain.entities import ATLAS_SYSTEM_PROMPT, ChatMessage, TokenUsage, ToolCallRequest
 from app.domain.interfaces import (
     ChatClient,
     ConversationRepository,
     GraphTokenProvider,
     PreferenceRepository,
     ToolProvider,
+    UsageRepository,
 )
 
 _RECENT_HISTORY_LIMIT = 20
+
+# NUL is never legal inside a model's natural-language reply, so it's a safe
+# in-band delimiter for tool-status events interleaved into the plain-text
+# stream — the frontend strips/interprets anything between two of these
+# rather than displaying it as chat text. Keeps the wire format a single
+# text/plain stream instead of needing SSE/framing on top of it.
+_SENTINEL = "\x00"
+
+
+def _tool_event(kind: str, tool_name: str) -> str:
+    return f"{_SENTINEL}{kind}:{tool_name}{_SENTINEL}"
 
 
 class ConversationNotFoundError(Exception):
@@ -29,7 +41,11 @@ class SendChatMessageUseCase:
     since we need the full response to see `tool_calls`); if it wants to
     call tools, execute them via the ToolProvider (backed by MCP servers —
     application has no idea) and ask again — this second call is streamed,
-    since it's the actual answer the user reads.
+    since it's the actual answer the user reads. Tool execution itself
+    happens inside the same generator as the final-answer streaming, with
+    `_tool_event` sentinels marking start/end of each call, so the frontend
+    can show live "running search_documents..." status instead of a silent
+    pause while tools run.
 
     Long-term memory (Phase 9) is loaded directly here, not via a tool —
     unlike Graph/docs tools that only run when the model decides to call
@@ -46,12 +62,14 @@ class SendChatMessageUseCase:
         graph_token_provider: GraphTokenProvider,
         tool_provider: ToolProvider,
         preference_repository: PreferenceRepository,
+        usage_repository: UsageRepository,
     ) -> None:
         self._chat_client = chat_client
         self._conversation_repository = conversation_repository
         self._graph_token_provider = graph_token_provider
         self._tool_provider = tool_provider
         self._preference_repository = preference_repository
+        self._usage_repository = usage_repository
 
     async def execute(
         self,
@@ -88,6 +106,8 @@ class SendChatMessageUseCase:
 
         tool_specs = await self._tool_provider.get_tool_specs()
         result = await self._chat_client.complete_with_tools(messages, tool_specs)
+        if result.usage:
+            await self._usage_repository.record_usage(user_oid, result.usage)
 
         if not result.tool_calls:
             return conversation_id, self._persist_single_reply(conversation_id, result.content or "")
@@ -100,15 +120,10 @@ class SendChatMessageUseCase:
 
         graph_token = await self._graph_token_provider.get_graph_token(user_oid, user_assertion)
         tool_context = {"GRAPH_ACCESS_TOKEN": graph_token, "USER_OID": user_oid}
-        for tool_call in result.tool_calls:
-            tool_result = await self._tool_provider.execute_tool(tool_call, tool_context)
-            tool_message = ChatMessage(
-                role="tool", content=tool_result, tool_call_id=tool_call.id, name=tool_call.name
-            )
-            messages.append(tool_message)
-            await self._conversation_repository.append_message(conversation_id, tool_message)
 
-        return conversation_id, self._stream_and_persist(conversation_id, messages)
+        return conversation_id, self._run_tools_then_stream(
+            conversation_id, user_oid, messages, result.tool_calls, tool_context
+        )
 
     async def _persist_single_reply(self, conversation_id: str, content: str) -> AsyncIterator[str]:
         yield content
@@ -116,11 +131,32 @@ class SendChatMessageUseCase:
             conversation_id, ChatMessage(role="assistant", content=content)
         )
 
-    async def _stream_and_persist(
-        self, conversation_id: str, messages: list[ChatMessage]
+    async def _run_tools_then_stream(
+        self,
+        conversation_id: str,
+        user_oid: str,
+        messages: list[ChatMessage],
+        tool_calls: list[ToolCallRequest],
+        tool_context: dict[str, str],
     ) -> AsyncIterator[str]:
+        for tool_call in tool_calls:
+            yield _tool_event("TOOL_START", tool_call.name)
+            tool_result = await self._tool_provider.execute_tool(tool_call, tool_context)
+            tool_message = ChatMessage(
+                role="tool", content=tool_result, tool_call_id=tool_call.id, name=tool_call.name
+            )
+            messages.append(tool_message)
+            await self._conversation_repository.append_message(conversation_id, tool_message)
+            yield _tool_event("TOOL_END", tool_call.name)
+
         assistant_text_parts: list[str] = []
-        async for chunk in self._chat_client.stream_completion(messages):
+        final_usage: TokenUsage | None = None
+
+        def _capture_usage(usage: TokenUsage) -> None:
+            nonlocal final_usage
+            final_usage = usage
+
+        async for chunk in self._chat_client.stream_completion(messages, on_usage=_capture_usage):
             assistant_text_parts.append(chunk)
             yield chunk
 
@@ -128,3 +164,5 @@ class SendChatMessageUseCase:
             conversation_id,
             ChatMessage(role="assistant", content="".join(assistant_text_parts)),
         )
+        if final_usage:
+            await self._usage_repository.record_usage(user_oid, final_usage)

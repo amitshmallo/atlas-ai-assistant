@@ -50,9 +50,23 @@ class ChatMessage(BaseModel):
     name: str | None = None
 
 
+class TokenUsage(BaseModel):
+    """Token counts for a single model call, reported by the Azure OpenAI
+    API itself (never estimated client-side) so cost tracking reflects
+    what was actually billed."""
+
+    prompt_tokens: int
+    completion_tokens: int
+
+    @property
+    def total_tokens(self) -> int:
+        return self.prompt_tokens + self.completion_tokens
+
+
 class ChatCompletionResult(BaseModel):
     content: str | None = None
     tool_calls: list[ToolCallRequest] = []
+    usage: TokenUsage | None = None
 
 
 class EmailSummary(BaseModel):
@@ -126,6 +140,18 @@ class DocumentMetadata(BaseModel):
     filename: str
     status: Literal["processing", "ready", "failed"]
     error_message: str | None = None
+
+
+class UsageSummary(BaseModel):
+    """Aggregated token usage/cost for a user, over some lookback window.
+    Cost is an estimate (settings.azure_openai_input/output_cost_per_1k),
+    not a billing-accurate figure — Azure billing is the source of truth."""
+
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    estimated_cost_usd: float
+    turn_count: int
 
 
 class UserPreference(BaseModel):

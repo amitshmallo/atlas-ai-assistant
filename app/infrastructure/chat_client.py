@@ -1,11 +1,11 @@
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Any
 
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from openai import AsyncAzureOpenAI
 
-from app.domain.entities import ChatCompletionResult, ChatMessage, ToolCallRequest
+from app.domain.entities import ChatCompletionResult, ChatMessage, TokenUsage, ToolCallRequest
 from app.infrastructure.config import settings
 from app.infrastructure.resilience import retry_openai_call
 
@@ -64,9 +64,14 @@ class AzureOpenAIChatClient:
             messages=[_to_openai_message(m) for m in messages],
             max_completion_tokens=settings.azure_openai_max_tokens,
             stream=True,
+            stream_options={"include_usage": True},
         )
 
-    async def stream_completion(self, messages: list[ChatMessage]) -> AsyncIterator[str]:
+    async def stream_completion(
+        self,
+        messages: list[ChatMessage],
+        on_usage: Callable[[TokenUsage], None] | None = None,
+    ) -> AsyncIterator[str]:
         # Only the call that opens the stream is retried, not the iteration
         # below — a retry decorator on a generator function doesn't work as
         # you'd expect: calling it returns a generator object immediately
@@ -74,6 +79,18 @@ class AzureOpenAIChatClient:
         # partway through consuming a stream, only ones from starting it.
         stream = await self._create_stream(messages)
         async for event in stream:
+            # The usage chunk (when stream_options.include_usage is set)
+            # arrives last, with an empty choices list — it never carries
+            # any content of its own.
+            if event.usage:
+                if on_usage:
+                    on_usage(
+                        TokenUsage(
+                            prompt_tokens=event.usage.prompt_tokens,
+                            completion_tokens=event.usage.completion_tokens,
+                        )
+                    )
+                continue
             if not event.choices:
                 continue
             delta = event.choices[0].delta
@@ -102,4 +119,13 @@ class AzureOpenAIChatClient:
             for tc in (message.tool_calls or [])
         ]
 
-        return ChatCompletionResult(content=message.content, tool_calls=tool_calls)
+        usage = (
+            TokenUsage(
+                prompt_tokens=response.usage.prompt_tokens,
+                completion_tokens=response.usage.completion_tokens,
+            )
+            if response.usage
+            else None
+        )
+
+        return ChatCompletionResult(content=message.content, tool_calls=tool_calls, usage=usage)

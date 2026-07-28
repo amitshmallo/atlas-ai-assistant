@@ -1,9 +1,9 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 import pytest
 
 from app.application.chat import ConversationNotFoundError, SendChatMessageUseCase
-from app.domain.entities import ChatCompletionResult, ChatMessage, ToolCallRequest, UserPreference
+from app.domain.entities import ChatCompletionResult, ChatMessage, TokenUsage, ToolCallRequest, UserPreference
 
 
 class FakeChatClient:
@@ -11,9 +11,11 @@ class FakeChatClient:
         self,
         completion: ChatCompletionResult | None = None,
         final_stream_chunks: list[str] | None = None,
+        final_usage: TokenUsage | None = None,
     ) -> None:
         self._completion = completion or ChatCompletionResult(content="ok", tool_calls=[])
         self._final_stream_chunks = final_stream_chunks or []
+        self._final_usage = final_usage
         self.messages_seen_by_complete: list[ChatMessage] | None = None
         self.messages_seen_by_stream: list[ChatMessage] | None = None
 
@@ -21,10 +23,16 @@ class FakeChatClient:
         self.messages_seen_by_complete = messages
         return self._completion
 
-    async def stream_completion(self, messages: list[ChatMessage]) -> AsyncIterator[str]:
+    async def stream_completion(
+        self,
+        messages: list[ChatMessage],
+        on_usage: Callable[[TokenUsage], None] | None = None,
+    ) -> AsyncIterator[str]:
         self.messages_seen_by_stream = messages
         for chunk in self._final_stream_chunks:
             yield chunk
+        if on_usage and self._final_usage:
+            on_usage(self._final_usage)
 
 
 class FakeConversationRepository:
@@ -84,12 +92,33 @@ class FakePreferenceRepository:
         self._preferences.append(UserPreference(key=key, value=value))
 
 
+class FakeUsageRepository:
+    def __init__(self) -> None:
+        self.recorded: list[tuple[str, TokenUsage]] = []
+
+    async def record_usage(self, user_oid: str, usage: TokenUsage) -> None:
+        self.recorded.append((user_oid, usage))
+
+    async def get_summary(self, user_oid: str, since_days: int) -> tuple[int, int, int]:
+        matching = [u for oid, u in self.recorded if oid == user_oid]
+        return (
+            sum(u.prompt_tokens for u in matching),
+            sum(u.completion_tokens for u in matching),
+            len(matching),
+        )
+
+
 async def _drain(stream: AsyncIterator[str]) -> list[str]:
     return [chunk async for chunk in stream]
 
 
 def _make_use_case(
-    chat_client, repository, token_provider=None, tool_provider=None, preference_repository=None
+    chat_client,
+    repository,
+    token_provider=None,
+    tool_provider=None,
+    preference_repository=None,
+    usage_repository=None,
 ):
     return SendChatMessageUseCase(
         chat_client,
@@ -97,6 +126,7 @@ def _make_use_case(
         token_provider or FakeGraphTokenProvider(),
         tool_provider or FakeToolProvider(),
         preference_repository or FakePreferenceRepository(),
+        usage_repository or FakeUsageRepository(),
     )
 
 
@@ -174,7 +204,15 @@ async def test_execute_with_tool_call_executes_tool_and_streams_final_answer():
     )
     collected = await _drain(stream)
 
-    assert collected == ["You have ", "3 unread emails."]
+    # Tool-status sentinels bracket the tool execution, then the streamed
+    # final answer follows — the frontend strips the sentinel chunks out
+    # of what it displays as chat text.
+    assert collected == [
+        "\x00TOOL_START:list_recent_emails\x00",
+        "\x00TOOL_END:list_recent_emails\x00",
+        "You have ",
+        "3 unread emails.",
+    ]
 
     # The Graph token was exchanged using the inbound JWT, not a stored credential.
     assert token_provider.last_call == ("user-1", "the-jwt")
@@ -233,3 +271,36 @@ async def test_execute_with_no_preferences_omits_preferences_section():
 
     system_message = fake_client.messages_seen_by_complete[0]
     assert "Remembered preferences" not in system_message.content
+
+
+async def test_execute_records_usage_from_initial_completion_when_no_tool_call():
+    usage = TokenUsage(prompt_tokens=100, completion_tokens=20)
+    fake_client = FakeChatClient(completion=ChatCompletionResult(content="ok", tool_calls=[], usage=usage))
+    repository = FakeConversationRepository()
+    usage_repository = FakeUsageRepository()
+    use_case = _make_use_case(fake_client, repository, usage_repository=usage_repository)
+
+    await use_case.execute(user_oid="user-1", conversation_id=None, user_message="hi", user_assertion="jwt")
+
+    assert usage_repository.recorded == [("user-1", usage)]
+
+
+async def test_execute_records_usage_from_both_calls_when_tool_call_happens():
+    tool_call = ToolCallRequest(id="call-1", name="list_recent_emails", arguments={})
+    routing_usage = TokenUsage(prompt_tokens=50, completion_tokens=10)
+    final_usage = TokenUsage(prompt_tokens=80, completion_tokens=30)
+    fake_client = FakeChatClient(
+        completion=ChatCompletionResult(content=None, tool_calls=[tool_call], usage=routing_usage),
+        final_stream_chunks=["done"],
+        final_usage=final_usage,
+    )
+    repository = FakeConversationRepository()
+    usage_repository = FakeUsageRepository()
+    use_case = _make_use_case(fake_client, repository, usage_repository=usage_repository)
+
+    _, stream = await use_case.execute(
+        user_oid="user-1", conversation_id=None, user_message="hi", user_assertion="jwt"
+    )
+    await _drain(stream)
+
+    assert usage_repository.recorded == [("user-1", routing_usage), ("user-1", final_usage)]

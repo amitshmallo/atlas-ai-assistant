@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     # bound input tokens (that's what _RECENT_HISTORY_LIMIT in
     # app/application/chat.py is for), just the runaway-output case.
     azure_openai_max_tokens: int = 2000
+    # Estimated, not billing-accurate — used only for the usage-summary
+    # endpoint's cost display. Defaults reflect gpt-5-mini list pricing;
+    # override via env if the deployment's actual pricing differs.
+    azure_openai_input_cost_per_1k: float = 0.00025
+    azure_openai_output_cost_per_1k: float = 0.002
 
     # Blob storage — defaults to the well-known Azurite emulator connection
     # string for local dev. In Azure, leave the connection string unset and

@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Any, Protocol
 
 from app.domain.entities import (
@@ -11,6 +11,7 @@ from app.domain.entities import (
     EmailMessage,
     EmailSendProposal,
     EmailSummary,
+    TokenUsage,
     ToolCallRequest,
     UserPreference,
     UserProfile,
@@ -47,7 +48,16 @@ class ChatClient(Protocol):
     """Abstract boundary over the LLM. application depends on this, never
     on the concrete Azure OpenAI SDK implementation."""
 
-    def stream_completion(self, messages: list[ChatMessage]) -> AsyncIterator[str]: ...
+    def stream_completion(
+        self,
+        messages: list[ChatMessage],
+        on_usage: Callable[[TokenUsage], None] | None = None,
+    ) -> AsyncIterator[str]:
+        """on_usage, if given, is invoked once with the final usage figures
+        after the stream completes — never mutated onto the client itself,
+        since a single AzureOpenAIChatClient instance is shared (via
+        @lru_cache) across concurrent requests from different users."""
+        ...
 
     async def complete_with_tools(
         self, messages: list[ChatMessage], tools: list[dict[str, Any]]
@@ -179,6 +189,19 @@ class PreferenceRepository(Protocol):
 
     async def set_preference(self, user_oid: str, key: str, value: str) -> None:
         """Upserts — setting an existing key's value again just updates it."""
+        ...
+
+
+class UsageRepository(Protocol):
+    """Abstract boundary over persisted token-usage records (Postgres).
+    Written once per model call (both the tool-routing call and the final
+    streamed reply), read back aggregated for the usage-summary endpoint."""
+
+    async def record_usage(self, user_oid: str, usage: TokenUsage) -> None: ...
+
+    async def get_summary(self, user_oid: str, since_days: int) -> tuple[int, int, int]:
+        """Returns (prompt_tokens, completion_tokens, turn_count) summed
+        over the lookback window."""
         ...
 
 

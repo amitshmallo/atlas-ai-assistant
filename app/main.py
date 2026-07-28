@@ -10,6 +10,7 @@ from app.api.routers.documents import router as documents_router
 from app.api.routers.email import router as email_router
 from app.api.routers.health import router as health_router
 from app.api.routers.me import router as me_router
+from app.api.routers.usage import router as usage_router
 from app.infrastructure.config import settings
 from app.infrastructure.logging import configure_logging
 from app.infrastructure.rate_limiter import limiter
@@ -39,6 +40,7 @@ def create_app() -> FastAPI:
     app.include_router(calendar_router)
     app.include_router(documents_router)
     app.include_router(email_router)
+    app.include_router(usage_router)
 
     return app
 
