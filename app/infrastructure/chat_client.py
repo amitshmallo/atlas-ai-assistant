@@ -62,7 +62,7 @@ class AzureOpenAIChatClient:
         return await self._client.chat.completions.create(
             model=settings.azure_openai_deployment,
             messages=[_to_openai_message(m) for m in messages],
-            max_tokens=settings.azure_openai_max_tokens,
+            max_completion_tokens=settings.azure_openai_max_tokens,
             stream=True,
         )
 
@@ -89,7 +89,7 @@ class AzureOpenAIChatClient:
             messages=[_to_openai_message(m) for m in messages],
             tools=tools,
             tool_choice="auto",
-            max_tokens=settings.azure_openai_max_tokens,
+            max_completion_tokens=settings.azure_openai_max_tokens,
         )
         message = response.choices[0].message
 
