@@ -1,3 +1,5 @@
+import hashlib
+
 import msal
 from redis.asyncio import Redis
 
@@ -5,6 +7,15 @@ from app.infrastructure.config import settings
 
 _CACHE_KEY_PREFIX = "graph_token:"
 _EXPIRY_SAFETY_MARGIN_SECONDS = 60
+
+
+def _scopes_fingerprint() -> str:
+    # Included in the cache key so a cached token from before a
+    # graph_scopes change (like adding Mail.Send) is never silently
+    # reused without the new scope — it just misses the cache and gets
+    # re-exchanged instead of returning a token that 403s against Graph
+    # for whatever permission was just added.
+    return hashlib.sha256(",".join(sorted(settings.graph_scopes)).encode()).hexdigest()[:8]
 
 
 class MsalOboTokenProvider:
@@ -22,7 +33,7 @@ class MsalOboTokenProvider:
         )
 
     async def get_graph_token(self, user_oid: str, user_assertion: str) -> str:
-        cache_key = f"{_CACHE_KEY_PREFIX}{user_oid}"
+        cache_key = f"{_CACHE_KEY_PREFIX}{user_oid}:{_scopes_fingerprint()}"
         cached = await self._redis.get(cache_key)
         if cached:
             return cached
