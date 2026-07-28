@@ -266,6 +266,28 @@
   padding: 0.5rem 0;
 }
 
+.documents-list-skeleton {
+  margin-top: 0.9rem;
+}
+
+.documents-item-skeleton {
+  height: 2.1rem;
+  border-radius: 6px;
+  margin: 0.4rem 0;
+  background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
+  background-size: 200% 100%;
+  animation: documents-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes documents-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
 /* ---------- Chat ---------- */
 
 .chat-conversation-id {

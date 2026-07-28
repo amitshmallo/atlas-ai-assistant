@@ -23,6 +23,7 @@ export function Documents({
   account: AccountInfo
 }) {
   const [documents, setDocuments] = useState<DocumentMetadata[]>([])
+  const [isLoadingDocuments, setIsLoadingDocuments] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -39,6 +40,8 @@ export function Documents({
       setDocuments(await response.json())
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setIsLoadingDocuments(false)
     }
   }
 
@@ -139,7 +142,12 @@ export function Documents({
         <p className="documents-dropzone-hint">PDF, JPEG, PNG, BMP, TIFF, or HEIF</p>
       </div>
 
-      {documents.length === 0 ? (
+      {isLoadingDocuments ? (
+        <ul className="documents-list documents-list-skeleton" aria-label="Loading documents">
+          <li className="documents-item-skeleton" />
+          <li className="documents-item-skeleton" />
+        </ul>
+      ) : documents.length === 0 ? (
         <p className="documents-empty">No documents uploaded yet.</p>
       ) : (
         <ul className="documents-list">
