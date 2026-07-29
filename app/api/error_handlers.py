@@ -1,9 +1,10 @@
 import logging
 
-from fastapi import HTTPException, Request
+from fastapi import Request
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
+from starlette.exceptions import HTTPException
 
 logger = logging.getLogger(__name__)
 
