@@ -24,10 +24,9 @@
 }
 
 .app > .panel {
-  flex: 1;
+  width: 100%;
   display: flex;
   flex-direction: column;
-  min-height: 0;
 }
 
 /* ---------- Sidebar ---------- */
@@ -468,16 +467,14 @@
 .chat {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
 }
 
 .chat-history {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  flex: 1;
   min-height: 160px;
+  max-height: 420px;
   overflow-y: auto;
   padding-right: 0.25rem;
 }
