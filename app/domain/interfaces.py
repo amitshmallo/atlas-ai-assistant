@@ -100,11 +100,17 @@ class GraphMailClient(Protocol):
 
 
 class GraphCalendarClient(Protocol):
-    """Abstract boundary over Microsoft Graph calendar endpoints. Only
-    invoked by the explicit calendar-confirmation endpoint — never by a
-    tool call the model can trigger directly."""
+    """Abstract boundary over Microsoft Graph calendar endpoints."""
 
-    async def create_event(self, access_token: str, proposal: CalendarEventProposal) -> CalendarEvent: ...
+    async def create_event(self, access_token: str, proposal: CalendarEventProposal) -> CalendarEvent:
+        """Only invoked by the explicit calendar-confirmation endpoint —
+        never by a tool call the model can trigger directly."""
+        ...
+
+    async def list_upcoming_events(self, access_token: str, top: int) -> list[CalendarEvent]:
+        """Read-only, so — unlike create_event — this IS callable directly
+        by a model tool, the same way list_recent_emails is."""
+        ...
 
 
 class ToolProvider(Protocol):

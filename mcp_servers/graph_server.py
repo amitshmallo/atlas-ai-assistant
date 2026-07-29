@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from mcp.server.fastmcp import FastMCP  # noqa: E402
 
+from app.infrastructure.graph_calendar_client import HttpxGraphCalendarClient  # noqa: E402
 from app.infrastructure.graph_mail_client import HttpxGraphMailClient  # noqa: E402
 from app.infrastructure.telemetry import configure_telemetry, traced_subprocess_span  # noqa: E402
 
@@ -28,6 +29,7 @@ configure_telemetry(service_name="atlas-mcp-graph")
 
 mcp = FastMCP("graph")
 _mail_client = HttpxGraphMailClient()
+_calendar_client = HttpxGraphCalendarClient()
 
 
 def _access_token() -> str:
@@ -61,6 +63,15 @@ async def draft_reply(message_id: str, body: str) -> str:
     with traced_subprocess_span("atlas-mcp-graph", "draft_reply"):
         draft = await _mail_client.create_draft_reply(_access_token(), message_id, body)
         return json.dumps(draft.model_dump())
+
+
+@mcp.tool()
+async def list_calendar_events(top: int = 10) -> str:
+    """List the user's upcoming calendar events (next 30 days), soonest
+    first. Read-only — safe to call directly, unlike creating an event."""
+    with traced_subprocess_span("atlas-mcp-graph", "list_calendar_events"):
+        events = await _calendar_client.list_upcoming_events(_access_token(), top=top)
+        return json.dumps([e.model_dump() for e in events])
 
 
 @mcp.tool()

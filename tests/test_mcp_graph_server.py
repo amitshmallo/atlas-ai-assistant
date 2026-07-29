@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-from app.domain.entities import EmailDraft, EmailMessage, EmailSummary
+from app.domain.entities import CalendarEvent, EmailDraft, EmailMessage, EmailSummary
 from mcp_servers import graph_server
 
 
@@ -31,10 +31,29 @@ class FakeGraphMailClient:
         return EmailDraft(id="draft-1")
 
 
+class FakeGraphCalendarClient:
+    def __init__(self) -> None:
+        self.last_call: tuple | None = None
+
+    async def list_upcoming_events(self, access_token, top):
+        self.last_call = ("list_upcoming_events", access_token, top)
+        return [CalendarEvent(id="evt-1", subject="Sync", start="2026-08-01T10:00:00", end="2026-08-01T10:30:00")]
+
+    async def create_event(self, access_token, proposal):
+        raise AssertionError("create_event should never be called from a tool")
+
+
 @pytest.fixture(autouse=True)
 def fake_mail_client(monkeypatch):
     fake = FakeGraphMailClient()
     monkeypatch.setattr(graph_server, "_mail_client", fake)
+    return fake
+
+
+@pytest.fixture(autouse=True)
+def fake_calendar_client(monkeypatch):
+    fake = FakeGraphCalendarClient()
+    monkeypatch.setattr(graph_server, "_calendar_client", fake)
     return fake
 
 
@@ -62,6 +81,13 @@ async def test_draft_reply_never_sends(fake_mail_client):
 
     assert fake_mail_client.last_call == ("create_draft_reply", "graph-token-xyz", "msg-1", "Sounds good")
     assert json.loads(result)["id"] == "draft-1"
+
+
+async def test_list_calendar_events_uses_env_token(fake_calendar_client):
+    result = await graph_server.list_calendar_events(top=5)
+
+    assert fake_calendar_client.last_call == ("list_upcoming_events", "graph-token-xyz", 5)
+    assert json.loads(result)[0]["subject"] == "Sync"
 
 
 async def test_propose_calendar_event_never_touches_mail_client(fake_mail_client):
