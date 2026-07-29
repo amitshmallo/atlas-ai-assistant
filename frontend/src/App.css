@@ -559,6 +559,49 @@
 .chat-proposal-actions {
   display: flex;
   gap: 0.5rem;
+  margin-top: 0.8rem;
+}
+
+.chat-proposal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-top: 0.7rem;
+}
+
+.chat-proposal-field input,
+.chat-proposal-body-input {
+  font-size: 0.9rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text-h);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  font-family: inherit;
+}
+
+.chat-proposal-field input:focus,
+.chat-proposal-body-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.chat-proposal-body-input {
+  resize: vertical;
+}
+
+.chat-proposal-attachment {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
 }
 
 .chat-status-text {
