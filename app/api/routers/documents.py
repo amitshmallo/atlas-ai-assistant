@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, stat
 from app.api.auth_deps import get_current_user
 from app.api.deps import get_delete_document_use_case, get_document_repository, get_upload_document_use_case
 from app.application.delete_document import DeleteDocumentUseCase, DocumentNotFoundError
-from app.application.upload_document import UploadDocumentUseCase
+from app.application.upload_document import FileTooLargeError, UnsupportedFileTypeError, UploadDocumentUseCase
 from app.domain.entities import AuthenticatedUser, DocumentMetadata
 from app.infrastructure.document_repository import SqlAlchemyDocumentRepository
 from app.infrastructure.rate_limiter import limiter
@@ -22,7 +22,17 @@ async def upload_document(
     use_case: Annotated[UploadDocumentUseCase, Depends(get_upload_document_use_case)],
 ) -> DocumentMetadata:
     content = await file.read()
-    return await use_case.execute(user_oid=user.oid, filename=file.filename or "untitled", content=content)
+    try:
+        return await use_case.execute(user_oid=user.oid, filename=file.filename or "untitled", content=content)
+    except UnsupportedFileTypeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported file type. Allowed: PDF, JPEG, PNG, BMP, TIFF, HEIF.",
+        ) from exc
+    except FileTooLargeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="File exceeds the 20 MB upload limit."
+        ) from exc
 
 
 @router.get("/documents", response_model=list[DocumentMetadata])

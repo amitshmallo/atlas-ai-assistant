@@ -1,6 +1,12 @@
 import uuid
 
-from app.application.upload_document import UploadDocumentUseCase
+import pytest
+
+from app.application.upload_document import (
+    FileTooLargeError,
+    UnsupportedFileTypeError,
+    UploadDocumentUseCase,
+)
 from app.domain.entities import DocumentMetadata
 
 
@@ -52,3 +58,40 @@ async def test_execute_uploads_blob_and_creates_processing_row():
     assert repo_blob_path == blob_path
     assert document_id == result.id
     uuid.UUID(document_id)  # must be a real UUID
+
+
+async def test_execute_rejects_unsupported_file_type_before_touching_storage():
+    repository = FakeDocumentRepository()
+    blob_client = FakeBlobStorageClient()
+    use_case = UploadDocumentUseCase(repository, blob_client)
+
+    with pytest.raises(UnsupportedFileTypeError):
+        await use_case.execute(user_oid="user-1", filename="malware.exe", content=b"MZ...")
+
+    assert blob_client.uploaded == []
+    assert repository.created == []
+
+
+async def test_execute_rejects_file_with_no_extension():
+    repository = FakeDocumentRepository()
+    blob_client = FakeBlobStorageClient()
+    use_case = UploadDocumentUseCase(repository, blob_client)
+
+    with pytest.raises(UnsupportedFileTypeError):
+        await use_case.execute(user_oid="user-1", filename="noextension", content=b"data")
+
+    assert blob_client.uploaded == []
+
+
+async def test_execute_rejects_file_over_size_limit():
+    repository = FakeDocumentRepository()
+    blob_client = FakeBlobStorageClient()
+    use_case = UploadDocumentUseCase(repository, blob_client)
+
+    oversized_content = b"x" * (20 * 1024 * 1024 + 1)
+
+    with pytest.raises(FileTooLargeError):
+        await use_case.execute(user_oid="user-1", filename="big.pdf", content=oversized_content)
+
+    assert blob_client.uploaded == []
+    assert repository.created == []

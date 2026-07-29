@@ -3,6 +3,22 @@ import uuid
 from app.domain.entities import DocumentMetadata
 from app.domain.interfaces import BlobStorageClient, DocumentRepository
 
+# Matches what the OCR pipeline (Azure Document Intelligence's prebuilt-read
+# model) actually supports — anything else can never leave `processing`, so
+# there's no reason to let it consume storage while it waits to fail.
+_ALLOWED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".heif", ".heic"}
+_MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
+
+
+class UnsupportedFileTypeError(Exception):
+    """Raised when the uploaded filename's extension isn't one the OCR
+    pipeline can process — checked before anything touches blob storage."""
+
+
+class FileTooLargeError(Exception):
+    """Raised when the upload exceeds _MAX_UPLOAD_BYTES — checked before
+    anything touches blob storage."""
+
 
 class UploadDocumentUseCase:
     """Depends only on domain interfaces. Uploads the raw bytes to blob
@@ -18,6 +34,12 @@ class UploadDocumentUseCase:
         self._blob_storage_client = blob_storage_client
 
     async def execute(self, user_oid: str, filename: str, content: bytes) -> DocumentMetadata:
+        extension = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+        if extension not in _ALLOWED_EXTENSIONS:
+            raise UnsupportedFileTypeError(extension or "(no extension)")
+        if len(content) > _MAX_UPLOAD_BYTES:
+            raise FileTooLargeError(len(content))
+
         # Generated here, not by the database, so it can be embedded in the
         # blob path before the row exists — see DocumentRepository.create_document.
         document_id = str(uuid.uuid4())
