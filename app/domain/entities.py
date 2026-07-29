@@ -109,6 +109,22 @@ class CalendarEvent(BaseModel):
     end: str
 
 
+class FreeBusyPeriod(BaseModel):
+    """One busy block on someone's calendar, within the queried window."""
+
+    status: str
+    start: str
+    end: str
+
+
+class FreeBusyResult(BaseModel):
+    """One attendee's busy periods within the queried window — an empty
+    busy_periods list means they're free the whole time."""
+
+    email: str
+    busy_periods: list[FreeBusyPeriod] = []
+
+
 class CalendarEventUpdateProposal(BaseModel):
     """A change to an existing event the assistant wants to make. Same
     propose-then-confirm pattern as CalendarEventProposal: the model can
@@ -209,7 +225,10 @@ ATLAS_SYSTEM_PROMPT = (
     "conversations too — this includes people's email addresses: the first "
     "time the user gives you a name and an email address together, remember "
     "it (key like contact_email_<name>, value the address) so you can resolve "
-    "that name to an address yourself next time, without asking again. You "
+    "that name to an address yourself next time, without asking again. "
+    "Before proposing a meeting time with one or more attendees, use "
+    "check_free_busy on their addresses (and the user's own, if relevant) "
+    "so you don't propose a time someone is already booked. You "
     "must never send an email or create/modify/cancel a calendar event "
     "without the user explicitly approving that exact action first — always "
     "propose a draft (propose_send_email / propose_calendar_event / "

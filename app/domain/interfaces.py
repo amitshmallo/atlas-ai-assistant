@@ -10,6 +10,7 @@ from app.domain.entities import (
     ChatMessage,
     ConversationSummary,
     DocumentMetadata,
+    FreeBusyResult,
     EmailDraft,
     EmailMessage,
     EmailSendProposal,
@@ -126,6 +127,14 @@ class GraphCalendarClient(Protocol):
 
     async def cancel_event(self, access_token: str, proposal: CalendarEventCancelProposal) -> None:
         """Only invoked by the explicit confirmation endpoint."""
+        ...
+
+    async def get_free_busy(
+        self, access_token: str, emails: list[str], start: str, end: str
+    ) -> list[FreeBusyResult]:
+        """Read-only — callable directly by a model tool, same as
+        list_upcoming_events. Lets Atlas check availability before
+        proposing a meeting time instead of guessing."""
         ...
 
 

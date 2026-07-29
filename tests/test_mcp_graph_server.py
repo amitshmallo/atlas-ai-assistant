@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-from app.domain.entities import CalendarEvent, EmailDraft, EmailMessage, EmailSummary
+from app.domain.entities import CalendarEvent, EmailDraft, EmailMessage, EmailSummary, FreeBusyPeriod, FreeBusyResult
 from mcp_servers import graph_server
 
 
@@ -51,6 +51,15 @@ class FakeGraphCalendarClient:
 
     async def cancel_event(self, access_token, proposal):
         raise AssertionError("cancel_event should never be called from a tool")
+
+    async def get_free_busy(self, access_token, emails, start, end):
+        self.last_call = ("get_free_busy", access_token, emails, start, end)
+        return [
+            FreeBusyResult(
+                email="a@example.com",
+                busy_periods=[FreeBusyPeriod(status="busy", start="2026-08-01T10:00:00", end="2026-08-01T11:00:00")],
+            )
+        ]
 
 
 @pytest.fixture(autouse=True)
@@ -116,6 +125,23 @@ async def test_propose_calendar_event_never_touches_mail_client(fake_mail_client
     parsed = json.loads(result)
     assert parsed["subject"] == "Sync"
     assert "not created" in parsed["status"]
+
+
+async def test_check_free_busy_uses_env_token(fake_calendar_client):
+    result = await graph_server.check_free_busy(
+        emails=["a@example.com"], start="2026-08-01T09:00:00", end="2026-08-01T17:00:00"
+    )
+
+    assert fake_calendar_client.last_call == (
+        "get_free_busy",
+        "graph-token-xyz",
+        ["a@example.com"],
+        "2026-08-01T09:00:00",
+        "2026-08-01T17:00:00",
+    )
+    parsed = json.loads(result)
+    assert parsed[0]["email"] == "a@example.com"
+    assert parsed[0]["busy_periods"][0]["status"] == "busy"
 
 
 async def test_propose_reschedule_event_never_touches_calendar_client(fake_calendar_client):

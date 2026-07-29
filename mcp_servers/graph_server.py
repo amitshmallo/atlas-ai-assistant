@@ -103,6 +103,56 @@ async def propose_calendar_event(subject: str, start: str, end: str, attendees: 
 
 
 @mcp.tool()
+async def check_free_busy(emails: list[str], start: str, end: str) -> str:
+    """Check whether the given people (email addresses, include the user's
+    own address if you want to check their own availability too) are busy
+    between start and end. Read-only — use this BEFORE proposing a meeting
+    time with attendees, so you don't propose a time someone's already
+    booked. Returns each person's busy periods in that window; an empty
+    list means they're free the whole time."""
+    with traced_subprocess_span("atlas-mcp-graph", "check_free_busy"):
+        results = await _calendar_client.get_free_busy(_access_token(), emails=emails, start=start, end=end)
+        return json.dumps([r.model_dump() for r in results])
+
+
+@mcp.tool()
+async def propose_reschedule_event(
+    event_id: str, subject: str | None = None, start: str | None = None, end: str | None = None
+) -> str:
+    """Propose a change to an EXISTING event (found via list_calendar_events
+    — event_id must come from there, never invented). This does NOT modify
+    anything — it only returns the proposal so the user can review and
+    confirm. Leave subject/start/end as null for whatever isn't changing."""
+    with traced_subprocess_span("atlas-mcp-graph", "propose_reschedule_event"):
+        return json.dumps(
+            {
+                "event_id": event_id,
+                "subject": subject,
+                "start": start,
+                "end": end,
+                "status": "proposed — not changed; ask the user to confirm via the app",
+            }
+        )
+
+
+@mcp.tool()
+async def propose_cancel_event(event_id: str, subject: str | None = None) -> str:
+    """Propose cancelling an EXISTING event (event_id from
+    list_calendar_events, never invented). This does NOT cancel anything —
+    it only returns the proposal for the user to confirm. `subject` is
+    just for display in the confirmation card, so the user can see which
+    event they're about to cancel."""
+    with traced_subprocess_span("atlas-mcp-graph", "propose_cancel_event"):
+        return json.dumps(
+            {
+                "event_id": event_id,
+                "subject": subject,
+                "status": "proposed — not cancelled; ask the user to confirm via the app",
+            }
+        )
+
+
+@mcp.tool()
 async def propose_send_email(to: str, subject: str, body: str, attachment_filename: str | None = None) -> str:
     """Propose an email to send. This does NOT send anything — it only
     returns the proposal so you can present it and ask the user to

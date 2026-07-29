@@ -7,11 +7,14 @@ from app.domain.entities import (
     CalendarEventCancelProposal,
     CalendarEventProposal,
     CalendarEventUpdateProposal,
+    FreeBusyPeriod,
+    FreeBusyResult,
 )
 from app.infrastructure.resilience import retry_graph_call
 
 _GRAPH_EVENTS_URL = "https://graph.microsoft.com/v1.0/me/events"
 _GRAPH_CALENDAR_VIEW_URL = "https://graph.microsoft.com/v1.0/me/calendarView"
+_GRAPH_GET_SCHEDULE_URL = "https://graph.microsoft.com/v1.0/me/calendar/getSchedule"
 _UPCOMING_WINDOW_DAYS = 30
 
 
@@ -134,3 +137,36 @@ class HttpxGraphCalendarClient:
                 json={},
             )
             response.raise_for_status()
+
+    @retry_graph_call
+    async def get_free_busy(
+        self, access_token: str, emails: list[str], start: str, end: str
+    ) -> list[FreeBusyResult]:
+        body = {
+            "schedules": emails,
+            "startTime": {"dateTime": start, "timeZone": "UTC"},
+            "endTime": {"dateTime": end, "timeZone": "UTC"},
+            "availabilityViewInterval": 60,
+        }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                _GRAPH_GET_SCHEDULE_URL,
+                headers={"Authorization": f"Bearer {access_token}"},
+                json=body,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        results = []
+        for schedule in data.get("value", []):
+            busy_periods = [
+                FreeBusyPeriod(
+                    status=item.get("status", "busy"),
+                    start=item.get("start", {}).get("dateTime", ""),
+                    end=item.get("end", {}).get("dateTime", ""),
+                )
+                for item in schedule.get("scheduleItems", [])
+            ]
+            results.append(FreeBusyResult(email=schedule.get("scheduleId", ""), busy_periods=busy_periods))
+        return results
