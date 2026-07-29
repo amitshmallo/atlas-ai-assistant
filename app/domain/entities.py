@@ -109,6 +109,30 @@ class CalendarEvent(BaseModel):
     end: str
 
 
+class CalendarEventUpdateProposal(BaseModel):
+    """A change to an existing event the assistant wants to make. Same
+    propose-then-confirm pattern as CalendarEventProposal: the model can
+    only surface this, never call Graph directly. Fields left as None mean
+    "leave unchanged" — the model only needs to know what's actually
+    changing (e.g. list_calendar_events told it the event_id and current
+    time, the user only asked to move the start time)."""
+
+    event_id: str
+    subject: str | None = None
+    start: str | None = None
+    end: str | None = None
+
+
+class CalendarEventCancelProposal(BaseModel):
+    """Cancelling an existing event the assistant found (e.g. via
+    list_calendar_events). Same propose-then-confirm pattern — the model
+    only ever surfaces this, a separate confirmed API call does the
+    cancellation itself."""
+
+    event_id: str
+    subject: str | None = None
+
+
 class EmailSendProposal(BaseModel):
     """An email the assistant wants to send. Never sent to Graph directly
     by the tool — only surfaced to the user for explicit confirmation via
@@ -186,14 +210,17 @@ ATLAS_SYSTEM_PROMPT = (
     "time the user gives you a name and an email address together, remember "
     "it (key like contact_email_<name>, value the address) so you can resolve "
     "that name to an address yourself next time, without asking again. You "
-    "must never send an email or create/modify a calendar event without the "
-    "user explicitly approving that exact action first — always propose a "
-    "draft (propose_send_email / propose_calendar_event) and ask for "
-    "confirmation; never call anything that sends or creates directly. If the "
-    "user asks to attach one of their uploaded documents, pass its filename "
-    "as attachment_filename on the proposal — never invent or guess a "
-    "filename that wasn't mentioned or found via search_documents. Be concise "
-    "and direct.\n\n"
+    "must never send an email or create/modify/cancel a calendar event "
+    "without the user explicitly approving that exact action first — always "
+    "propose a draft (propose_send_email / propose_calendar_event / "
+    "propose_reschedule_event / propose_cancel_event) and ask for "
+    "confirmation; never call anything that sends, creates, changes, or "
+    "cancels directly. Rescheduling or cancelling an event requires its "
+    "event_id, which must come from list_calendar_events — never invent one. "
+    "If the user asks to attach one of their uploaded documents, pass its "
+    "filename as attachment_filename on the proposal — never invent or "
+    "guess a filename that wasn't mentioned or found via search_documents. "
+    "Be concise and direct.\n\n"
     "Answer style: keep replies short — a few sentences or a tight list, not "
     "paragraphs. Don't offer unsolicited suggestions, alternatives, or "
     "'next steps' the user didn't ask for; answer exactly what was asked and "

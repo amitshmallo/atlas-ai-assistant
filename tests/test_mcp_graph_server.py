@@ -46,6 +46,12 @@ class FakeGraphCalendarClient:
     async def create_event(self, access_token, proposal):
         raise AssertionError("create_event should never be called from a tool")
 
+    async def update_event(self, access_token, proposal):
+        raise AssertionError("update_event should never be called from a tool")
+
+    async def cancel_event(self, access_token, proposal):
+        raise AssertionError("cancel_event should never be called from a tool")
+
 
 @pytest.fixture(autouse=True)
 def fake_mail_client(monkeypatch):
@@ -110,6 +116,25 @@ async def test_propose_calendar_event_never_touches_mail_client(fake_mail_client
     parsed = json.loads(result)
     assert parsed["subject"] == "Sync"
     assert "not created" in parsed["status"]
+
+
+async def test_propose_reschedule_event_never_touches_calendar_client(fake_calendar_client):
+    result = await graph_server.propose_reschedule_event(event_id="evt-1", start="2026-08-02T09:00:00")
+
+    assert fake_calendar_client.last_call is None  # no Graph call was made
+    parsed = json.loads(result)
+    assert parsed["event_id"] == "evt-1"
+    assert parsed["start"] == "2026-08-02T09:00:00"
+    assert "not changed" in parsed["status"]
+
+
+async def test_propose_cancel_event_never_touches_calendar_client(fake_calendar_client):
+    result = await graph_server.propose_cancel_event(event_id="evt-1", subject="Sync")
+
+    assert fake_calendar_client.last_call is None  # no Graph call was made
+    parsed = json.loads(result)
+    assert parsed["event_id"] == "evt-1"
+    assert "not cancelled" in parsed["status"]
 
 
 async def test_propose_send_email_never_touches_mail_client(fake_mail_client):

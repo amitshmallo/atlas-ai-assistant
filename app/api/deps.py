@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.cancel_calendar_event import CancelCalendarEventUseCase
 from app.application.chat import SendChatMessageUseCase
 from app.application.create_calendar_event import CreateCalendarEventUseCase
 from app.application.delete_document import DeleteDocumentUseCase
@@ -11,6 +12,7 @@ from app.application.get_usage_summary import GetUsageSummaryUseCase
 from app.application.graph_profile import GetMyProfileUseCase
 from app.application.health import GetHealthStatusUseCase
 from app.application.send_email import SendEmailUseCase
+from app.application.update_calendar_event import UpdateCalendarEventUseCase
 from app.application.upload_document import UploadDocumentUseCase
 from app.infrastructure.blob_storage_client import AzureBlobStorageClient
 from app.infrastructure.chat_client import AzureOpenAIChatClient
@@ -82,6 +84,18 @@ def get_create_calendar_event_use_case() -> CreateCalendarEventUseCase:
     token_provider = MsalOboTokenProvider(redis_client)
     calendar_client = HttpxGraphCalendarClient()
     return CreateCalendarEventUseCase(token_provider, calendar_client)
+
+
+def get_update_calendar_event_use_case() -> UpdateCalendarEventUseCase:
+    token_provider = MsalOboTokenProvider(redis_client)
+    calendar_client = HttpxGraphCalendarClient()
+    return UpdateCalendarEventUseCase(token_provider, calendar_client)
+
+
+def get_cancel_calendar_event_use_case() -> CancelCalendarEventUseCase:
+    token_provider = MsalOboTokenProvider(redis_client)
+    calendar_client = HttpxGraphCalendarClient()
+    return CancelCalendarEventUseCase(token_provider, calendar_client)
 
 
 def get_document_repository(session: SessionDep) -> SqlAlchemyDocumentRepository:

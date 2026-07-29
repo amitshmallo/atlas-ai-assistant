@@ -2,7 +2,12 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 
-from app.domain.entities import CalendarEvent, CalendarEventProposal
+from app.domain.entities import (
+    CalendarEvent,
+    CalendarEventCancelProposal,
+    CalendarEventProposal,
+    CalendarEventUpdateProposal,
+)
 from app.infrastructure.resilience import retry_graph_call
 
 _GRAPH_EVENTS_URL = "https://graph.microsoft.com/v1.0/me/events"
@@ -86,3 +91,46 @@ class HttpxGraphCalendarClient:
             )
             for item in data.get("value", [])
         ]
+
+    # Deliberately not retried, same reasoning as create_event — a lost
+    # response after Graph already applied the patch would retry into a
+    # second identical patch, which is harmless here (PATCH is naturally
+    # idempotent for a full-field replace) EXCEPT that Graph also emails
+    # attendees an update notification per PATCH that changes time/subject
+    # — a retry could send a confusing second "this event changed" email.
+    async def update_event(self, access_token: str, proposal: CalendarEventUpdateProposal) -> CalendarEvent:
+        body: dict = {}
+        if proposal.subject is not None:
+            body["subject"] = proposal.subject
+        if proposal.start is not None:
+            body["start"] = {"dateTime": proposal.start, "timeZone": "UTC"}
+        if proposal.end is not None:
+            body["end"] = {"dateTime": proposal.end, "timeZone": "UTC"}
+
+        async with httpx.AsyncClient() as client:
+            response = await client.patch(
+                f"{_GRAPH_EVENTS_URL}/{proposal.event_id}",
+                headers={"Authorization": f"Bearer {access_token}"},
+                json=body,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        return CalendarEvent(
+            id=data["id"],
+            subject=data.get("subject", ""),
+            start=data.get("start", {}).get("dateTime", ""),
+            end=data.get("end", {}).get("dateTime", ""),
+        )
+
+    # Deliberately not retried: Graph's /cancel sends a cancellation email
+    # to every attendee — a retry after a lost response would send a
+    # second one.
+    async def cancel_event(self, access_token: str, proposal: CalendarEventCancelProposal) -> None:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{_GRAPH_EVENTS_URL}/{proposal.event_id}/cancel",
+                headers={"Authorization": f"Bearer {access_token}"},
+                json={},
+            )
+            response.raise_for_status()

@@ -3,7 +3,9 @@ from typing import Any, Protocol
 
 from app.domain.entities import (
     CalendarEvent,
+    CalendarEventCancelProposal,
     CalendarEventProposal,
+    CalendarEventUpdateProposal,
     ChatCompletionResult,
     ChatMessage,
     ConversationSummary,
@@ -115,6 +117,15 @@ class GraphCalendarClient(Protocol):
     async def list_upcoming_events(self, access_token: str, top: int) -> list[CalendarEvent]:
         """Read-only, so — unlike create_event — this IS callable directly
         by a model tool, the same way list_recent_emails is."""
+        ...
+
+    async def update_event(self, access_token: str, proposal: CalendarEventUpdateProposal) -> CalendarEvent:
+        """Only invoked by the explicit confirmation endpoint, same as
+        create_event — never by a tool call the model can trigger directly."""
+        ...
+
+    async def cancel_event(self, access_token: str, proposal: CalendarEventCancelProposal) -> None:
+        """Only invoked by the explicit confirmation endpoint."""
         ...
 
 
