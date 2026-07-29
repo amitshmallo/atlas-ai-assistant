@@ -8,11 +8,26 @@
 }
 
 .app {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-width: 0;
-  max-width: 720px;
-  margin: 0 auto;
   padding: 2rem 1.25rem 4rem;
+}
+
+/* Chat fills the whole middle column (sidebar <-> documents bar); Settings
+   stays narrower and centered since it's just a couple of small forms. */
+.app > .settings {
+  max-width: 640px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.app > .panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* ---------- Sidebar ---------- */
@@ -450,12 +465,19 @@
   margin-bottom: 0.6rem;
 }
 
+.chat {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 .chat-history {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
+  flex: 1;
   min-height: 160px;
-  max-height: 420px;
   overflow-y: auto;
   padding-right: 0.25rem;
 }
