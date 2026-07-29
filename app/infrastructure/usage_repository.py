@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +24,10 @@ class SqlAlchemyUsageRepository:
         await self._session.commit()
 
     async def get_summary(self, user_oid: str, since_days: int) -> tuple[int, int, int]:
-        since = datetime.now(timezone.utc) - timedelta(days=since_days)
+        # created_at is TIMESTAMP WITHOUT TIME ZONE (naive, implicitly UTC —
+        # see server_default=func.now()), so this must stay naive too:
+        # asyncpg refuses to bind a tz-aware datetime against that column.
+        since = datetime.utcnow() - timedelta(days=since_days)
         result = await self._session.execute(
             select(
                 func.coalesce(func.sum(UsageRecordModel.prompt_tokens), 0),
