@@ -40,6 +40,25 @@ class HttpxGraphMailClient:
         return [self._to_summary(item) for item in data.get("value", [])]
 
     @retry_graph_call
+    async def search_emails(self, access_token: str, query: str, top: int) -> list[EmailSummary]:
+        # $search (full-text, across subject/body/from — unlike $filter,
+        # which only matches exact field values) requires this header per
+        # Graph's docs, plus $orderby is not supported alongside $search.
+        headers = _auth_header(access_token) | {"ConsistencyLevel": "eventual"}
+        params: dict[str, str | int] = {
+            "$search": f'"{query}"',
+            "$top": top,
+            "$select": "id,subject,from,receivedDateTime,isRead,bodyPreview",
+        }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{_GRAPH_BASE}/me/messages", params=params, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
+        return [self._to_summary(item) for item in data.get("value", [])]
+
+    @retry_graph_call
     async def get_email(self, access_token: str, message_id: str) -> EmailMessage:
         async with httpx.AsyncClient() as client:
             response = await client.get(

@@ -22,6 +22,10 @@ class FakeGraphMailClient:
         self.last_call = ("list_recent_emails", access_token, top, unread_only)
         return [EmailSummary(id="msg-1", subject="Hello", preview="hi")]
 
+    async def search_emails(self, access_token, query, top):
+        self.last_call = ("search_emails", access_token, query, top)
+        return [EmailSummary(id="msg-2", subject="Invoice #42", preview="attached")]
+
     async def get_email(self, access_token, message_id):
         self.last_call = ("get_email", access_token, message_id)
         return EmailMessage(id=message_id, subject="Hello", body="Full body")
@@ -67,6 +71,13 @@ async def test_list_recent_emails_uses_env_token(fake_mail_client):
 
     assert fake_mail_client.last_call == ("list_recent_emails", "graph-token-xyz", 3, True)
     assert json.loads(result)[0]["id"] == "msg-1"
+
+
+async def test_search_emails_uses_env_token(fake_mail_client):
+    result = await graph_server.search_emails(query="invoice", top=10)
+
+    assert fake_mail_client.last_call == ("search_emails", "graph-token-xyz", "invoice", 10)
+    assert json.loads(result)[0]["subject"] == "Invoice #42"
 
 
 async def test_read_email_uses_env_token(fake_mail_client):

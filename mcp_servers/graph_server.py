@@ -48,6 +48,17 @@ async def list_recent_emails(top: int = 5, unread_only: bool = True) -> str:
 
 
 @mcp.tool()
+async def search_emails(query: str, top: int = 10) -> str:
+    """Full-text search the user's mailbox by keyword — matches subject,
+    body, and sender, not just the most recent messages. Use this instead
+    of list_recent_emails when the user asks to find a specific email
+    rather than "what's new"."""
+    with traced_subprocess_span("atlas-mcp-graph", "search_emails"):
+        summaries = await _mail_client.search_emails(_access_token(), query=query, top=top)
+        return json.dumps([s.model_dump() for s in summaries])
+
+
+@mcp.tool()
 async def read_email(message_id: str) -> str:
     """Read the full subject and body of one email by its id."""
     with traced_subprocess_span("atlas-mcp-graph", "read_email"):

@@ -77,6 +77,11 @@ class GraphMailClient(Protocol):
         self, access_token: str, top: int, unread_only: bool
     ) -> list[EmailSummary]: ...
 
+    async def search_emails(self, access_token: str, query: str, top: int) -> list[EmailSummary]:
+        """Full-text search across subject/body/from, not just the most
+        recent messages — read-only, callable directly by a model tool."""
+        ...
+
     async def get_email(self, access_token: str, message_id: str) -> EmailMessage: ...
 
     async def create_draft_reply(
