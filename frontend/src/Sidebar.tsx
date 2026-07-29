@@ -11,6 +11,11 @@ interface ConversationSummary {
 
 export type View = { type: 'chat'; conversationId: string | null } | { type: 'settings' }
 
+// Module-level, not component state — shows the last-known list instantly
+// on mount instead of an empty "No conversations yet" flash, while a
+// background refetch still keeps it current.
+let cachedConversations: ConversationSummary[] | null = null
+
 // refreshKey bumps whenever a turn creates a brand-new conversation (see
 // Chat's onConversationCreated) — the sidebar has no other way to know a
 // new one exists, since it doesn't own conversation state itself.
@@ -29,7 +34,7 @@ export function Sidebar({
   onNewChat: () => void
   refreshKey: number
 }) {
-  const [conversations, setConversations] = useState<ConversationSummary[]>([])
+  const [conversations, setConversations] = useState<ConversationSummary[]>(cachedConversations ?? [])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -42,6 +47,7 @@ export function Sidebar({
         })
         if (!response.ok) throw new Error(`API returned ${response.status}`)
         const data = await response.json()
+        cachedConversations = data
         if (!cancelled) setConversations(data)
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err))

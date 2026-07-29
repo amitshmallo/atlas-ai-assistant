@@ -15,6 +15,13 @@ interface DocumentMetadata {
 // frontend has no other way to know when a document becomes searchable.
 const POLL_INTERVAL_MS = 4000
 
+// Module-level, not component state, so it survives Documents unmounting —
+// which happens on every switch away from the chat view (see App.tsx) —
+// without needing a full app-wide cache library. Shows instantly on
+// remount instead of the loading skeleton, then a background refetch
+// still runs to catch changes made elsewhere (or by a teammate later).
+let cachedDocuments: DocumentMetadata[] | null = null
+
 export function Documents({
   instance,
   account,
@@ -22,8 +29,8 @@ export function Documents({
   instance: IPublicClientApplication
   account: AccountInfo
 }) {
-  const [documents, setDocuments] = useState<DocumentMetadata[]>([])
-  const [isLoadingDocuments, setIsLoadingDocuments] = useState(true)
+  const [documents, setDocuments] = useState<DocumentMetadata[]>(cachedDocuments ?? [])
+  const [isLoadingDocuments, setIsLoadingDocuments] = useState(cachedDocuments === null)
   const [error, setError] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -37,7 +44,9 @@ export function Documents({
         headers: { Authorization: `Bearer ${tokenResponse.accessToken}` },
       })
       if (!response.ok) throw new Error(`API returned ${response.status}`)
-      setDocuments(await response.json())
+      const data = await response.json()
+      cachedDocuments = data
+      setDocuments(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -106,7 +115,11 @@ export function Documents({
         headers: { Authorization: `Bearer ${tokenResponse.accessToken}` },
       })
       if (!response.ok) throw new Error(`API returned ${response.status}`)
-      setDocuments((prev) => prev.filter((doc) => doc.id !== documentId))
+      setDocuments((prev) => {
+        const next = prev.filter((doc) => doc.id !== documentId)
+        cachedDocuments = next
+        return next
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
